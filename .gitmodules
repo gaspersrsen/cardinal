@@ -7,6 +7,7 @@
 [submodule "contrib/moose"]
 	path = contrib/moose
 	url = https://github.com/idaholab/moose.git
+	branch = master
 [submodule "contrib/SAM"]
 	path = contrib/SAM
 	url = git@gitlab-nse.egs.anl.gov:SAM/SAM.git
