@@ -1,6 +1,6 @@
 [submodule "contrib/openmc"]
 	path = contrib/openmc
-	https://github.com/gaspersrsen/openmc.git
+	url = https://github.com/gaspersrsen/openmc.git
 [submodule "contrib/nekRS"]
 	path = contrib/nekRS
 	url = https://github.com/gaspersrsen/nekRS.git
