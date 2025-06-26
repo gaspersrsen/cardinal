@@ -244,4 +244,3 @@ mesh_info.i
 cardinal.yaml
 unit/cardinal-unit.yaml
 *.step
-test/tests/nek_ci
