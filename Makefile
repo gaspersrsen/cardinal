@@ -44,7 +44,7 @@ ENABLE_NEK          ?= yes
 ENABLE_OPENMC       ?= yes
 
 # Whether you want to build OpenMC with DAGMC support
-ENABLE_DAGMC        ?= no
+ENABLE_DAGMC        ?= yes
 
 # Whether we want to use the double-precision interface to Embree for DAGMC
 # ray tracing instead of MOAB.
