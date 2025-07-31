@@ -8,11 +8,21 @@
   type = NekRSProblem
   casename = 'pin'
   write_fld_files = true
+  n_usrwrk_slots = 1
 
-  # this just helps us skip the heat source transfer into NekRS from MOOSE
-  # (infrastructure that exists for coupling to neutronics) when we could
-  # easily just set the constant pin heat source ourselves
-  has_heat_source = false
+  [FieldTransfers]
+    [avg_flux]
+      type = NekBoundaryFlux
+      direction = to_nek
+      usrwrk_slot = 0
+      postprocessor_to_conserve = flux_integral
+    []
+    [temp]
+      type = NekFieldVariable
+      field = temperature
+      direction = from_nek
+    []
+  []
 []
 
 [Postprocessors]

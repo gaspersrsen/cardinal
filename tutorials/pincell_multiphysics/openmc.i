@@ -129,7 +129,7 @@ dT = ${fparse power / mdot / Cp}
   [Tallies]
     [heat_source]
       type = CellTally
-      blocks = '2'
+      block = '2'
       name = heat_source
 
       check_equal_mapped_tally_volumes = true
@@ -191,6 +191,7 @@ dT = ${fparse power / mdot / Cp}
     type = KEigenvalue
   []
   [k_std_dev]
-    type = KStandardDeviation
+    type = KEigenvalue
+    output = 'std_dev'
   []
 []

@@ -1,3 +1,5 @@
+!include common_input.i
+
 num_layers_for_THM = 50      # number of elements in the THM model; for the converged
                              # case, we set this to 150
 
@@ -174,7 +176,7 @@ num_layers_for_THM = 50      # number of elements in the THM model; for the conv
   [Tallies]
     [heat_source]
       type = CellTally
-      blocks = '2'
+      block = '2'
       name = heat_source
       check_equal_mapped_tally_volumes = true
       output = 'unrelaxed_tally_std_dev'
@@ -349,7 +351,8 @@ num_layers_for_THM = 50      # number of elements in the THM model; for the conv
     type = KEigenvalue
   []
   [k_std_dev]
-    type = KStandardDeviation
+    type = KEigenvalue
+    output = 'std_dev'
   []
   [min_power]
     type = ElementExtremeValue

@@ -1,12 +1,20 @@
 [Problem]
-  type = NekRSStandaloneProblem
+  type = NekRSProblem
   casename = 'brick'
-  output = 'pressure'
 
-  nondimensional = true
-  L_ref = 0.5
-  U_ref = 0.9
-  rho_0 = 0.8
+  [Dimensionalize]
+    L = 0.5
+    U = 0.9
+    rho = 0.8
+  []
+
+  [FieldTransfers]
+    [P]
+      type = NekFieldVariable
+      field = pressure
+      direction = from_nek
+    []
+  []
 []
 
 [Mesh]

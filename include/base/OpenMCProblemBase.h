@@ -23,8 +23,6 @@
 #include "CardinalProblem.h"
 #include "PostprocessorInterface.h"
 #include "CardinalEnums.h"
-#include "OpenMCNuclideDensities.h"
-#include "OpenMCTallyNuclides.h"
 
 #include "mpi.h"
 #include "openmc/bank.h"
@@ -42,6 +40,11 @@
 #include "openmc/tallies/tally.h"
 #include "openmc/tallies/filter_cell_instance.h"
 #include "xtensor/xview.hpp"
+
+// Forward declarations to avoid cyclic dependencies.
+class OpenMCNuclideDensities;
+class OpenMCDomainFilterEditor;
+class OpenMCTallyEditor;
 
 /**
  * Base class for all MOOSE wrappings of OpenMC
@@ -149,6 +152,10 @@ public:
 
   /// Run a k-eigenvalue OpenMC simulation
   void externalSolve() override;
+
+  /// Set the 'mesh changed' adaptivity flag.
+  virtual void syncSolutions(ExternalProblem::Direction direction) override;
+  virtual bool adaptMesh() override;
 
   /// Import temperature and density from a properties.h5 file
   void importProperties() const;
@@ -342,9 +349,42 @@ public:
    */
   long unsigned int numCells() const;
 
+  /**
+   * Return all IDs of all Cardinal-mapped Tallies
+   * @return all Cardinal-mapped Tally IDs
+   */
+  virtual std::vector<int32_t> getMappedTallyIDs() const = 0;
+
+  /**
+   * Whether or not the problem is tallying kinetics parameters.
+   * @return if the problem is tallying kinetics parameters
+   */
+  bool computeKineticsParams() const { return _calc_kinetics_params; }
+
+  /**
+   * Get the tally responsible for accumulating the scores for \Lambda_{eff} and \beta_{eff}.
+   * @return the global IFP tally
+   */
+  const openmc::Tally & getKineticsParamTally();
+
 protected:
   /// Find all userobjects which are changing OpenMC data structures
   void getOpenMCUserObjects();
+
+  /// Ensure that the IDs of OpenMC objects in UserObjects don't clash
+  void checkOpenMCUserObjectIDs() const;
+
+  /// Ensure that any tally editors don't apply to Cardinal-mapped tallies
+  void checkTallyEditorIDs() const;
+
+  /// Execute all filter editor userobjects
+  void executeFilterEditors();
+
+  /// Execute all tally editor userobjects
+  void executeTallyEditors();
+
+  // execute tallly and filte editors
+  void executeEditors();
 
   /// Set the nuclide densities for any materials being modified via MOOSE
   void sendNuclideDensitiesToOpenMC();
@@ -445,11 +485,39 @@ protected:
   /// Userobjects for changing OpenMC material compositions
   std::vector<OpenMCNuclideDensities *> _nuclide_densities_uos;
 
-  /// Userobjects for changing OpenMC tally nuclides
-  std::vector<OpenMCTallyNuclides *> _tally_nuclides_uos;
+  /// Userobjects for creating/changing OpenMC filters
+  std::vector<OpenMCDomainFilterEditor *> _filter_editor_uos;
+
+  /// Userobjects for creating/changing OpenMC tallies
+  std::vector<OpenMCTallyEditor *> _tally_editor_uos;
 
   /// Mapping from local element indices to global element indices for this rank
   std::vector<unsigned int> _local_to_global_elem;
+
+  /// Whether or not the problem contains mesh adaptivity.
+  const bool _has_adaptivity;
+
+  /**
+   * A flag which is set to true if OpenMC should rerun after an adaptivity cycle.
+   * This is a performance optimization to avoid rerunning OpenMC if adaptivity
+   * didn't refine/coarsen the mesh on the last cycle.
+   */
+  bool _run_on_adaptivity_cycle;
+
+  /// A flag to indicate if OpenMC is calculating kinetics parameters.
+  const bool _calc_kinetics_params;
+
+  /// Whether to reset the seed each time a new OpenMC calculation runs
+  const bool & _reset_seed;
+
+  /// The initial OpenMC seed
+  const int64_t _initial_seed;
+
+  /// The index of a global tally to accumulate the scores required for kinetics parameters.
+  int _ifp_tally_index = -1;
+
+  /// The global tally used to accumulate the scores required for kinetics parameters.
+  openmc::Tally * _ifp_tally = nullptr;
 
   /// Conversion unit to transfer between kg/m3 and g/cm3
   static constexpr Real _density_conversion_factor{0.001};

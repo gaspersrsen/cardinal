@@ -9,17 +9,45 @@
 []
 
 [Problem]
-  type = NekRSStandaloneProblem
+  type = NekRSProblem
   casename = 'sfr_7pin'
-  output = 'temperature pressure velocity'
 
-  nondimensional = true
-  L_ref = 7.646e-3
-  T_ref = 100.0
-  dT_ref = 50.0
-  U_ref = 2.0
-  rho_0 = 834.5
-  Cp_0 = 1228.0
+  [Dimensionalize]
+    L = 7.646e-3
+    T = 100.0
+    dT = 50.0
+    U = 2.0
+    rho = 834.5
+    Cp = 1228.0
+  []
+
+  [FieldTransfers]
+    [temp]
+      type = NekFieldVariable
+      direction = from_nek
+      field = temperature
+    []
+    [P]
+      type = NekFieldVariable
+      direction = from_nek
+      field = pressure
+    []
+    [vel_x]
+      type = NekFieldVariable
+      direction = from_nek
+      field = velocity_x
+    []
+    [vel_y]
+      type = NekFieldVariable
+      direction = from_nek
+      field = velocity_y
+    []
+    [vel_z]
+      type = NekFieldVariable
+      direction = from_nek
+      field = velocity_z
+    []
+  []
 []
 
 [AuxVariables]

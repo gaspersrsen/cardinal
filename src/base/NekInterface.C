@@ -24,6 +24,8 @@
 static nekrs::characteristicScales scales;
 static dfloat * sgeo;
 static dfloat * vgeo;
+static unsigned int n_usrwrk_slots;
+static bool is_nondimensional;
 nekrs::usrwrkIndices indices;
 
 namespace nekrs
@@ -67,7 +69,7 @@ setStartTime(const double & start)
 void
 write_usrwrk_field_file(const int & slot, const std::string & prefix, const dfloat & time, const int & step, const bool & write_coords)
 {
-  int num_bytes = scalarFieldOffset() * sizeof(dfloat);
+  int num_bytes = fieldOffset() * sizeof(dfloat);
 
   nrs_t * nrs = (nrs_t *)nrsPtr();
   occa::memory o_write = platform->device.malloc(num_bytes);
@@ -203,6 +205,15 @@ velocityFieldOffset()
   return nrs->fieldOffset;
 }
 
+int
+fieldOffset()
+{
+  if (hasTemperatureVariable())
+    return scalarFieldOffset();
+  else
+    return velocityFieldOffset();
+}
+
 mesh_t *
 entireMesh()
 {
@@ -271,8 +282,11 @@ scratchAvailable()
 void
 initializeScratch(const unsigned int & n_slots)
 {
+  if (n_slots == 0)
+    return;
+
   nrs_t * nrs = (nrs_t *)nrsPtr();
-  mesh_t * mesh = temperatureMesh();
+  mesh_t * mesh = entireMesh();
 
   // clear them just to be sure
   freeScratch();
@@ -280,9 +294,10 @@ initializeScratch(const unsigned int & n_slots)
   // In order to make indexing simpler in the device user functions (which is where the
   // boundary conditions are then actually applied), we define these scratch arrays
   // as volume arrays.
-  nrs->usrwrk = (double *)calloc(n_slots * scalarFieldOffset(), sizeof(double));
-  nrs->o_usrwrk = platform->device.malloc(n_slots * scalarFieldOffset() * sizeof(double),
-                                          nrs->usrwrk);
+  nrs->usrwrk = (double *)calloc(n_slots * fieldOffset(), sizeof(double));
+  nrs->o_usrwrk = platform->device.malloc(n_slots * fieldOffset() * sizeof(double), nrs->usrwrk);
+
+  n_usrwrk_slots = n_slots;
 }
 
 void
@@ -485,104 +500,6 @@ usrwrkSideIntegral(const unsigned int & slot,
   return total_integral;
 }
 
-bool
-normalizeFluxBySideset(const NekBoundaryCoupling & nek_boundary_coupling,
-                       const std::vector<int> & boundary,
-                       const std::vector<double> & moose_integral,
-                       std::vector<double> & nek_integral,
-                       double & normalized_nek_integral)
-{
-  // scale the nek flux to dimensional form for the sake of normalizing against
-  // a dimensional MOOSE flux
-  for (auto & i : nek_integral)
-    i *= scales.A_ref * scales.flux_ref;
-
-  nrs_t * nrs = (nrs_t *)nrsPtr();
-  mesh_t * mesh = temperatureMesh();
-
-  for (int k = 0; k < nek_boundary_coupling.total_n_faces; ++k)
-  {
-    if (nek_boundary_coupling.process[k] == commRank())
-    {
-      int i = nek_boundary_coupling.element[k];
-      int j = nek_boundary_coupling.face[k];
-
-      int face_id = mesh->EToB[i * mesh->Nfaces + j];
-      auto it = std::find(boundary.begin(), boundary.end(), face_id);
-      auto b_index = it - boundary.begin();
-
-      // avoid divide-by-zero
-      double ratio = 1.0;
-      if (std::abs(nek_integral[b_index]) > abs_tol)
-        ratio = moose_integral[b_index] / nek_integral[b_index];
-
-      int offset = i * mesh->Nfaces * mesh->Nfp + j * mesh->Nfp;
-
-      for (int v = 0; v < mesh->Nfp; ++v)
-      {
-        int id = mesh->vmapM[offset + v];
-        nrs->usrwrk[indices.flux + id] *= ratio;
-      }
-    }
-  }
-
-  // check that the normalization worked properly - confirm against dimensional form
-  auto integrals = usrwrkSideIntegral(indices.flux, boundary, nek_mesh::all);
-  normalized_nek_integral = std::accumulate(integrals.begin(), integrals.end(), 0.0) * scales.A_ref * scales.flux_ref;
-  double total_moose_integral = std::accumulate(moose_integral.begin(), moose_integral.end(), 0.0);
-  bool low_rel_err = std::abs(total_moose_integral) > abs_tol ?
-                     std::abs(normalized_nek_integral - total_moose_integral) / total_moose_integral < rel_tol : true;
-  bool low_abs_err = std::abs(normalized_nek_integral - total_moose_integral) < abs_tol;
-
-  return low_rel_err || low_abs_err;
-}
-
-
-bool
-normalizeFlux(const NekBoundaryCoupling & nek_boundary_coupling,
-              const std::vector<int> & boundary,
-              const double moose_integral,
-              double nek_integral,
-              double & normalized_nek_integral)
-{
-  // scale the nek flux to dimensional form for the sake of normalizing against
-  // a dimensional MOOSE flux
-  nek_integral *= scales.A_ref * scales.flux_ref;
-
-  // avoid divide-by-zero
-  if (std::abs(nek_integral) < abs_tol)
-    return true;
-
-  nrs_t * nrs = (nrs_t *)nrsPtr();
-  mesh_t * mesh = temperatureMesh();
-
-  const double ratio = moose_integral / nek_integral;
-
-  for (int k = 0; k < nek_boundary_coupling.total_n_faces; ++k)
-  {
-    if (nek_boundary_coupling.process[k] == commRank())
-    {
-      int i = nek_boundary_coupling.element[k];
-      int j = nek_boundary_coupling.face[k];
-      int offset = i * mesh->Nfaces * mesh->Nfp + j * mesh->Nfp;
-
-      for (int v = 0; v < mesh->Nfp; ++v)
-      {
-        int id = mesh->vmapM[offset + v];
-        nrs->usrwrk[indices.flux + id] *= ratio;
-      }
-    }
-  }
-
-  // check that the normalization worked properly - confirm against dimensional form
-  auto integrals = usrwrkSideIntegral(indices.flux, boundary, nek_mesh::all);
-  normalized_nek_integral = std::accumulate(integrals.begin(), integrals.end(), 0.0) * scales.A_ref * scales.flux_ref;
-  bool low_rel_err = std::abs(normalized_nek_integral - moose_integral) / moose_integral < rel_tol;
-  bool low_abs_err = std::abs(normalized_nek_integral - moose_integral) < abs_tol;
-
-  return low_rel_err || low_abs_err;
-}
-
 void
 limitTemperature(const double * min_T, const double * max_T)
 {
@@ -665,7 +582,7 @@ sideExtremeValue(const std::vector<int> & boundary_id, const field::NekFieldEnum
 
   double value = max ? -std::numeric_limits<double>::max() : std::numeric_limits<double>::max();
 
-  double (*f)(int);
+  double (*f)(int, int);
   f = solutionPointer(field);
 
   for (int i = 0; i < mesh->Nelements; ++i)
@@ -680,9 +597,9 @@ sideExtremeValue(const std::vector<int> & boundary_id, const field::NekFieldEnum
         for (int v = 0; v < mesh->Nfp; ++v)
         {
           if (max)
-            value = std::max(value, f(mesh->vmapM[offset + v]));
+            value = std::max(value, f(mesh->vmapM[offset + v], 0 /* unused */));
           else
-            value = std::min(value, f(mesh->vmapM[offset + v]));
+            value = std::min(value, f(mesh->vmapM[offset + v], 0 /* unused */));
         }
       }
     }
@@ -694,11 +611,7 @@ sideExtremeValue(const std::vector<int> & boundary_id, const field::NekFieldEnum
   MPI_Allreduce(&value, &reduced_value, 1, MPI_DOUBLE, op, platform->comm.mpiComm);
 
   // dimensionalize the field if needed
-  dimensionalize(field, reduced_value);
-
-  // if temperature, we need to add the reference temperature
-  if (field == field::temperature)
-    reduced_value += scales.T_ref;
+  reduced_value = reduced_value * nondimensionalDivisor(field) + nondimensionalAdditive(field);
 
   return reduced_value;
 }
@@ -708,7 +621,7 @@ volumeExtremeValue(const field::NekFieldEnum & field, const nek_mesh::NekMeshEnu
 {
   double value = max ? -std::numeric_limits<double>::max() : std::numeric_limits<double>::max();
 
-  double (*f)(int);
+  double (*f)(int, int);
   f = solutionPointer(field);
 
   mesh_t * mesh;
@@ -738,9 +651,9 @@ volumeExtremeValue(const field::NekFieldEnum & field, const nek_mesh::NekMeshEnu
     for (int j = 0; j < mesh->Np; ++j)
     {
       if (max)
-        value = std::max(value, f(i * mesh->Np + j));
+        value = std::max(value, f(i * mesh->Np + j, 0 /* unused */));
       else
-        value = std::min(value, f(i * mesh->Np + j));
+        value = std::min(value, f(i * mesh->Np + j, 0 /* unused */));
     }
   }
 
@@ -750,11 +663,7 @@ volumeExtremeValue(const field::NekFieldEnum & field, const nek_mesh::NekMeshEnu
   MPI_Allreduce(&value, &reduced_value, 1, MPI_DOUBLE, op, platform->comm.mpiComm);
 
   // dimensionalize the field if needed
-  dimensionalize(field, reduced_value);
-
-  // if temperature, we need to add the reference temperature
-  if (field == field::temperature)
-    reduced_value += scales.T_ref;
+  reduced_value = reduced_value * nondimensionalDivisor(field) + nondimensionalAdditive(field);
 
   return reduced_value;
 }
@@ -872,14 +781,14 @@ dimensionalizeVolumeIntegral(const field::NekFieldEnum & integrand,
                              double & integral)
 {
   // dimensionalize the field if needed
-  dimensionalize(integrand, integral);
+  integral *= nondimensionalDivisor(integrand);
 
   // scale the volume integral
   integral *= scales.V_ref;
 
-  // if temperature, we need to add the reference temperature multiplied by the volume integral
-  if (integrand == field::temperature)
-    integral += scales.T_ref * volume;
+  // for quantities with a relative scaling, we need to add back the reference
+  // contribution to the volume integral
+  integral += nondimensionalAdditive(integrand) * volume;
 }
 
 void
@@ -888,14 +797,14 @@ dimensionalizeSideIntegral(const field::NekFieldEnum & integrand,
                            double & integral)
 {
   // dimensionalize the field if needed
-  dimensionalize(integrand, integral);
+  integral *= nondimensionalDivisor(integrand);
 
   // scale the boundary integral
   integral *= scales.A_ref;
 
-  // if temperature, we need to add the reference temperature multiplied by the area integral
-  if (integrand == field::temperature)
-    integral += scales.T_ref * area;
+  // for quantities with a relative scaling, we need to add back the reference
+  // contribution to the side integral
+  integral += nondimensionalAdditive(integrand) * area;
 }
 
 void
@@ -905,14 +814,16 @@ dimensionalizeSideIntegral(const field::NekFieldEnum & integrand,
 			                     const nek_mesh::NekMeshEnum pp_mesh)
 {
   // dimensionalize the field if needed
-  dimensionalize(integrand, integral);
+  integral *= nondimensionalDivisor(integrand);
 
   // scale the boundary integral
   integral *= scales.A_ref;
 
-  // if temperature, we need to add the reference temperature multiplied by the area integral
-  if (integrand == field::temperature)
-    integral += scales.T_ref * area(boundary_id, pp_mesh);
+  // for quantities with a relative scaling, we need to add back the reference
+  // contribution to the side integral; we need this form here to avoid a recursive loop
+  auto add = nondimensionalAdditive(integrand);
+  if (std::abs(add) > 1e-8)
+    integral += add * area(boundary_id, pp_mesh);
 }
 
 double
@@ -923,7 +834,7 @@ volumeIntegral(const field::NekFieldEnum & integrand, const Real & volume,
 
   double integral = 0.0;
 
-  double (*f)(int);
+  double (*f)(int, int);
   f = solutionPointer(integrand);
 
   for (int k = 0; k < mesh->Nelements; ++k)
@@ -931,7 +842,7 @@ volumeIntegral(const field::NekFieldEnum & integrand, const Real & volume,
     int offset = k * mesh->Np;
 
     for (int v = 0; v < mesh->Np; ++v)
-      integral += f(offset + v) * vgeo[mesh->Nvgeo * offset + v + mesh->Np * JWID];
+      integral += f(offset + v, 0 /* unused */) * vgeo[mesh->Nvgeo * offset + v + mesh->Np * JWID];
   }
 
   // sum across all processes
@@ -984,7 +895,7 @@ sideIntegral(const std::vector<int> & boundary_id, const field::NekFieldEnum & i
 
   double integral = 0.0;
 
-  double (*f)(int);
+  double (*f)(int, int);
   f = solutionPointer(integrand);
 
   for (int i = 0; i < mesh->Nelements; ++i)
@@ -998,7 +909,8 @@ sideIntegral(const std::vector<int> & boundary_id, const field::NekFieldEnum & i
         int offset = i * mesh->Nfaces * mesh->Nfp + j * mesh->Nfp;
         for (int v = 0; v < mesh->Nfp; ++v)
         {
-          integral += f(mesh->vmapM[offset + v]) * sgeo[mesh->Nsgeo * (offset + v) + WSJID];
+          integral +=
+              f(mesh->vmapM[offset + v], 0 /* unused */) * sgeo[mesh->Nsgeo * (offset + v) + WSJID];
         }
       }
     }
@@ -1076,7 +988,7 @@ sideMassFluxWeightedIntegral(const std::vector<int> & boundary_id,
 
   double integral = 0.0;
 
-  double (*f)(int);
+  double (*f)(int, int);
   f = solutionPointer(integrand);
 
   for (int i = 0; i < mesh->Nelements; ++i)
@@ -1096,7 +1008,7 @@ sideMassFluxWeightedIntegral(const std::vector<int> & boundary_id,
               nrs->U[vol_id + 0 * velocityFieldOffset()] * sgeo[surf_offset + NXID] +
               nrs->U[vol_id + 1 * velocityFieldOffset()] * sgeo[surf_offset + NYID] +
               nrs->U[vol_id + 2 * velocityFieldOffset()] * sgeo[surf_offset + NZID];
-          integral += f(vol_id) * rho * normal_velocity * sgeo[surf_offset + WSJID];
+          integral += f(vol_id, 0 /* unused */) * rho * normal_velocity * sgeo[surf_offset + WSJID];
         }
       }
     }
@@ -1107,14 +1019,17 @@ sideMassFluxWeightedIntegral(const std::vector<int> & boundary_id,
   MPI_Allreduce(&integral, &total_integral, 1, MPI_DOUBLE, MPI_SUM, platform->comm.mpiComm);
 
   // dimensionalize the field if needed
-  dimensionalize(integrand, total_integral);
+  total_integral *= nondimensionalDivisor(integrand);
 
   // dimensionalize the mass flux and area
   total_integral *= scales.rho_ref * scales.U_ref * scales.A_ref;
 
-  // if temperature, we need to add the reference temperature multiplied by the mass flux integral
-  if (integrand == field::temperature)
-    total_integral += scales.T_ref * massFlowrate(boundary_id, pp_mesh);
+  // for quantities with a relative scaling, we need to add back the reference
+  // contribution to the mass flux integral; we need this form here to avoid an infinite
+  // recursive loop
+  auto add = nondimensionalAdditive(integrand);
+  if (std::abs(add) > 1e-8)
+    total_integral += add * massFlowrate(boundary_id, pp_mesh);
 
   return total_integral;
 }
@@ -1172,9 +1087,7 @@ heatFluxIntegral(const std::vector<int> & boundary_id, const nek_mesh::NekMeshEn
   platform->options.getArgs("SCALAR00 DIFFUSIVITY", k);
 
   double integral = 0.0;
-
-  double * grad_T = (double *)calloc(3 * scalarFieldOffset(), sizeof(double));
-  gradient(scalarFieldOffset(), nrs->cds->S, grad_T, pp_mesh);
+  double * grad_T = (double *)calloc(3 * mesh->Np, sizeof(double));
 
   for (int i = 0; i < mesh->Nelements; ++i)
   {
@@ -1184,16 +1097,20 @@ heatFluxIntegral(const std::vector<int> & boundary_id, const nek_mesh::NekMeshEn
 
       if (std::find(boundary_id.begin(), boundary_id.end(), face_id) != boundary_id.end())
       {
+        // some inefficiency if an element has more than one face on the sideset of interest,
+        // because we will recompute the gradient in the element more than one time - but this
+        // is of little practical interest because this will be a minority of cases.
+        gradient(mesh->Np, i, nrs->cds->S, grad_T, pp_mesh);
+
         int offset = i * mesh->Nfaces * mesh->Nfp + j * mesh->Nfp;
         for (int v = 0; v < mesh->Nfp; ++v)
         {
-          int vol_id = mesh->vmapM[offset + v];
+          int vol_id = mesh->vmapM[offset + v] - i * mesh->Np;
           int surf_offset = mesh->Nsgeo * (offset + v);
 
-          double normal_grad_T =
-              grad_T[vol_id + 0 * scalarFieldOffset()] * sgeo[surf_offset + NXID] +
-              grad_T[vol_id + 1 * scalarFieldOffset()] * sgeo[surf_offset + NYID] +
-              grad_T[vol_id + 2 * scalarFieldOffset()] * sgeo[surf_offset + NZID];
+          double normal_grad_T = grad_T[vol_id + 0 * mesh->Np] * sgeo[surf_offset + NXID] +
+                                 grad_T[vol_id + 1 * mesh->Np] * sgeo[surf_offset + NYID] +
+                                 grad_T[vol_id + 2 * mesh->Np] * sgeo[surf_offset + NZID];
 
           integral += -k * normal_grad_T * sgeo[surf_offset + WSJID];
         }
@@ -1214,64 +1131,49 @@ heatFluxIntegral(const std::vector<int> & boundary_id, const nek_mesh::NekMeshEn
 }
 
 void
-gradient(const int offset, const double * f, double * grad_f, const nek_mesh::NekMeshEnum pp_mesh)
+gradient(const int offset,
+         const int e,
+         const double * f,
+         double * grad_f,
+         const nek_mesh::NekMeshEnum pp_mesh)
 {
   mesh_t * mesh = getMesh(pp_mesh);
 
-  std::vector<std::vector<std::vector<double>>> s_P(
-      mesh->Nq, std::vector<std::vector<double>>(mesh->Nq, std::vector<double>(mesh->Nq, 0)));
-  std::vector<std::vector<double>> s_D(mesh->Nq, std::vector<double>(mesh->Nq, 0));
-
-  for (int e = 0; e < mesh->Nelements; ++e)
+  for (int k = 0; k < mesh->Nq; ++k)
   {
-    for (int k = 0; k < mesh->Nq; ++k)
-      for (int j = 0; j < mesh->Nq; ++j)
-        for (int i = 0; i < mesh->Nq; ++i)
-        {
-          const int id = e * mesh->Np + k * mesh->Nq * mesh->Nq + j * mesh->Nq + i;
-
-          s_P[k][j][i] = f[id];
-
-          if (k == 0)
-            s_D[j][i] = mesh->D[j * mesh->Nq + i];
-        }
-
-    for (int k = 0; k < mesh->Nq; ++k)
+    for (int j = 0; j < mesh->Nq; ++j)
     {
-      for (int j = 0; j < mesh->Nq; ++j)
+      for (int i = 0; i < mesh->Nq; ++i)
       {
-        for (int i = 0; i < mesh->Nq; ++i)
+        const int gid = e * mesh->Np * mesh->Nvgeo + k * mesh->Nq * mesh->Nq + j * mesh->Nq + i;
+        const double drdx = vgeo[gid + RXID * mesh->Np];
+        const double drdy = vgeo[gid + RYID * mesh->Np];
+        const double drdz = vgeo[gid + RZID * mesh->Np];
+        const double dsdx = vgeo[gid + SXID * mesh->Np];
+        const double dsdy = vgeo[gid + SYID * mesh->Np];
+        const double dsdz = vgeo[gid + SZID * mesh->Np];
+        const double dtdx = vgeo[gid + TXID * mesh->Np];
+        const double dtdy = vgeo[gid + TYID * mesh->Np];
+        const double dtdz = vgeo[gid + TZID * mesh->Np];
+
+        // compute 'r' and 's' derivatives of (q_m) at node n
+        double dpdr = 0.f, dpds = 0.f, dpdt = 0.f;
+
+        for (int n = 0; n < mesh->Nq; ++n)
         {
-          const int gid = e * mesh->Np * mesh->Nvgeo + k * mesh->Nq * mesh->Nq + j * mesh->Nq + i;
-          const double drdx = vgeo[gid + RXID * mesh->Np];
-          const double drdy = vgeo[gid + RYID * mesh->Np];
-          const double drdz = vgeo[gid + RZID * mesh->Np];
-          const double dsdx = vgeo[gid + SXID * mesh->Np];
-          const double dsdy = vgeo[gid + SYID * mesh->Np];
-          const double dsdz = vgeo[gid + SZID * mesh->Np];
-          const double dtdx = vgeo[gid + TXID * mesh->Np];
-          const double dtdy = vgeo[gid + TYID * mesh->Np];
-          const double dtdz = vgeo[gid + TZID * mesh->Np];
+          const double Dr = mesh->D[i * mesh->Nq + n];
+          const double Ds = mesh->D[j * mesh->Nq + n];
+          const double Dt = mesh->D[k * mesh->Nq + n];
 
-          // compute 'r' and 's' derivatives of (q_m) at node n
-          double dpdr = 0.f, dpds = 0.f, dpdt = 0.f;
-
-          for (int n = 0; n < mesh->Nq; ++n)
-          {
-            const double Dr = s_D[i][n];
-            const double Ds = s_D[j][n];
-            const double Dt = s_D[k][n];
-
-            dpdr += Dr * s_P[k][j][n];
-            dpds += Ds * s_P[k][n][i];
-            dpdt += Dt * s_P[n][j][i];
-          }
-
-          const int id = e * mesh->Np + k * mesh->Nq * mesh->Nq + j * mesh->Nq + i;
-          grad_f[id + 0 * offset] = drdx * dpdr + dsdx * dpds + dtdx * dpdt;
-          grad_f[id + 1 * offset] = drdy * dpdr + dsdy * dpds + dtdy * dpdt;
-          grad_f[id + 2 * offset] = drdz * dpdr + dsdz * dpds + dtdz * dpdt;
+          dpdr += Dr * f[e * mesh->Np + k * mesh->Nq * mesh->Nq + j * mesh->Nq + n];
+          dpds += Ds * f[e * mesh->Np + k * mesh->Nq * mesh->Nq + n * mesh->Nq + i];
+          dpdt += Dt * f[e * mesh->Np + n * mesh->Nq * mesh->Nq + j * mesh->Nq + i];
         }
+
+        const int id = k * mesh->Nq * mesh->Nq + j * mesh->Nq + i;
+        grad_f[id + 0 * offset] = drdx * dpdr + dsdx * dpds + dtdx * dpdt;
+        grad_f[id + 1 * offset] = drdy * dpdr + dsdy * dpds + dtdy * dpdt;
+        grad_f[id + 2 * offset] = drdz * dpdr + dsdz * dpds + dtdz * dpdt;
       }
     }
   }
@@ -1371,69 +1273,118 @@ validBoundaryIDs(const std::vector<int> & boundary_id, int & first_invalid_id, i
 }
 
 double
-scalar01(const int id)
+get_scalar01(const int id, const int surf_offset = 0)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   return nrs->cds->S[id + 1 * scalarFieldOffset()];
 }
 
 double
-scalar02(const int id)
+get_scalar02(const int id, const int surf_offset = 0)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   return nrs->cds->S[id + 2 * scalarFieldOffset()];
 }
 
 double
-scalar03(const int id)
+get_scalar03(const int id, const int surf_offset = 0)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   return nrs->cds->S[id + 3 * scalarFieldOffset()];
 }
 
 double
-temperature(const int id)
+get_usrwrk00(const int id, const int surf_offset = 0)
+{
+  nrs_t * nrs = (nrs_t *)nrsPtr();
+  return nrs->usrwrk[id];
+}
+
+double
+get_usrwrk01(const int id, const int surf_offset = 0)
+{
+  nrs_t * nrs = (nrs_t *)nrsPtr();
+  return nrs->usrwrk[id + nrs->fieldOffset];
+}
+
+double
+get_usrwrk02(const int id, const int surf_offset = 0)
+{
+  nrs_t * nrs = (nrs_t *)nrsPtr();
+  return nrs->usrwrk[id + 2 * nrs->fieldOffset];
+}
+
+double
+get_temperature(const int id, const int surf_offset)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   return nrs->cds->S[id];
 }
 
 double
-pressure(const int id)
+get_flux(const int id, const int surf_offset)
+{
+  // TODO: this function does not support non-constant thermal conductivity
+  double k;
+  platform->options.getArgs("SCALAR00 DIFFUSIVITY", k);
+
+  nrs_t * nrs = (nrs_t *)nrsPtr();
+
+  // this call of nek_mesh::all should be fine because flux is not a 'field' which can be
+  // provided to the postprocessors which have the option to operate only on part of the mesh
+  auto mesh = getMesh(nek_mesh::all);
+  int elem_id = id / mesh->Np;
+  int vertex_id = id % mesh->Np;
+
+  // This function is slightly inefficient, because we compute grad(T) for all nodes in
+  // an element even though we only call this function for one node at a time
+  double * grad_T = (double *)calloc(3 * mesh->Np, sizeof(double));
+  gradient(mesh->Np, elem_id, nrs->cds->S, grad_T, nek_mesh::all);
+
+  double normal_grad_T = grad_T[vertex_id + 0 * mesh->Np] * sgeo[surf_offset + NXID] +
+                         grad_T[vertex_id + 1 * mesh->Np] * sgeo[surf_offset + NYID] +
+                         grad_T[vertex_id + 2 * mesh->Np] * sgeo[surf_offset + NZID];
+  freePointer(grad_T);
+
+  return -k * normal_grad_T;
+}
+
+double
+get_pressure(const int id, const int surf_offset)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   return nrs->P[id];
 }
 
 double
-unity(const int /* id */)
+get_unity(const int /* id */, const int surf_offset)
 {
   return 1.0;
 }
 
 double
-velocity_x(const int id)
+get_velocity_x(const int id, const int surf_offset)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   return nrs->U[id + 0 * nrs->fieldOffset];
 }
 
 double
-velocity_y(const int id)
+get_velocity_y(const int id, const int surf_offset)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   return nrs->U[id + 1 * nrs->fieldOffset];
 }
 
 double
-velocity_z(const int id)
+get_velocity_z(const int id, const int surf_offset)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   return nrs->U[id + 2 * nrs->fieldOffset];
 }
 
 double
-velocity(const int id)
+get_velocity(const int id, const int surf_offset)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   int offset = nrs->fieldOffset;
@@ -1443,113 +1394,245 @@ velocity(const int id)
                    nrs->U[id + 2 * offset] * nrs->U[id + 2 * offset]);
 }
 
+double
+get_velocity_x_squared(const int id, const int surf_offset)
+{
+  return std::pow(get_velocity_x(id, surf_offset), 2);
+}
+
+double
+get_velocity_y_squared(const int id, const int surf_offset)
+{
+  return std::pow(get_velocity_y(id, surf_offset), 2);
+}
+
+double
+get_velocity_z_squared(const int id, const int surf_offset)
+{
+  return std::pow(get_velocity_z(id, surf_offset), 2);
+}
+
 void
-flux(const int id, const dfloat value)
+set_temperature(const int id, const dfloat value)
+{
+  nrs_t * nrs = (nrs_t *)nrsPtr();
+  nrs->usrwrk[indices.temperature + id] = value;
+}
+
+void
+set_flux(const int id, const dfloat value)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   nrs->usrwrk[indices.flux + id] = value;
 }
 
 void
-heat_source(const int id, const dfloat value)
+set_heat_source(const int id, const dfloat value)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   nrs->usrwrk[indices.heat_source + id] = value;
 }
 
 void
-x_displacement(const int id, const dfloat value)
+set_x_displacement(const int id, const dfloat value)
 {
   mesh_t * mesh = entireMesh();
   mesh->x[id] = value;
 }
 
 void
-y_displacement(const int id, const dfloat value)
+set_y_displacement(const int id, const dfloat value)
 {
   mesh_t * mesh = entireMesh();
   mesh->y[id] = value;
 }
 
 void
-z_displacement(const int id, const dfloat value)
+set_z_displacement(const int id, const dfloat value)
 {
   mesh_t * mesh = entireMesh();
   mesh->z[id] = value;
 }
 
 void
-mesh_velocity_x(const int id, const dfloat value)
+set_mesh_velocity_x(const int id, const dfloat value)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   nrs->usrwrk[indices.mesh_velocity_x + id] = value;
 }
 
 void
-mesh_velocity_y(const int id, const dfloat value)
+set_mesh_velocity_y(const int id, const dfloat value)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   nrs->usrwrk[indices.mesh_velocity_y + id] = value;
 }
 
 void
-mesh_velocity_z(const int id, const dfloat value)
+set_mesh_velocity_z(const int id, const dfloat value)
 {
   nrs_t * nrs = (nrs_t *)nrsPtr();
   nrs->usrwrk[indices.mesh_velocity_z + id] = value;
 }
 
-double (*solutionPointer(const field::NekFieldEnum & field))(int)
+void
+checkFieldValidity(const field::NekWriteEnum & field)
 {
-  double (*f)(int);
+  switch (field)
+  {
+    case field::flux:
+      if (!hasTemperatureVariable())
+        mooseError("Cannot get NekRS heat flux "
+                   "because your Nek case files do not have a temperature variable!");
+      break;
+    case field::heat_source:
+      if (!hasTemperatureVariable())
+        mooseError("Cannot get NekRS heat source "
+                   "because your Nek case files do not have a temperature variable!");
+      break;
+    case field::x_displacement:
+    case field::y_displacement:
+    case field::z_displacement:
+    case field::mesh_velocity_x:
+    case field::mesh_velocity_y:
+    case field::mesh_velocity_z:
+      break;
+    default:
+      mooseError("Unhandled NekWriteEnum in checkFieldValidity!");
+  }
+}
+
+void
+checkFieldValidity(const field::NekFieldEnum & field)
+{
+  // by placing this check here, as opposed to inside the NekFieldInterface,
+  // we can also leverage this error checking for the 'outputs' of NekRSProblem,
+  // which does not inherit from NekFieldInterface but still accesses the solutionPointers.
+  // If this gets moved elsewhere, need to be sure to add dedicated testing for
+  // the 'outputs' on NekRSProblem.
+
+  // TODO: would be nice for NekRSProblem to only access field information via the
+  // NekFieldInterface; refactor later
+
+  switch (field)
+  {
+    case field::temperature:
+      if (!hasTemperatureVariable())
+        mooseError("Cannot find 'temperature' "
+                   "because your Nek case files do not have a temperature variable!");
+      break;
+    case field::scalar01:
+      if (!hasScalarVariable(1))
+        mooseError("Cannot find 'scalar01' "
+                   "because your Nek case files do not have a scalar01 variable!");
+      break;
+    case field::scalar02:
+      if (!hasScalarVariable(2))
+        mooseError("Cannot find 'scalar02' "
+                   "because your Nek case files do not have a scalar02 variable!");
+      break;
+    case field::scalar03:
+      if (!hasScalarVariable(3))
+        mooseError("Cannot find 'scalar03' "
+                   "because your Nek case files do not have a scalar03 variable!");
+      break;
+    case field::usrwrk00:
+      if (n_usrwrk_slots < 1)
+        mooseError("Cannot find 'usrwrk00' because you have only allocated 'n_usrwrk_slots = " +
+                   std::to_string(n_usrwrk_slots) + "'");
+      break;
+    case field::usrwrk01:
+      if (n_usrwrk_slots < 2)
+        mooseError("Cannot find 'usrwrk01' because you have only allocated 'n_usrwrk_slots = " +
+                   std::to_string(n_usrwrk_slots) + "'");
+      break;
+    case field::usrwrk02:
+      if (n_usrwrk_slots < 3)
+        mooseError("Cannot find 'usrwrk02' because you have only allocated 'n_usrwrk_slots = " +
+                   std::to_string(n_usrwrk_slots) + "'");
+      break;
+  }
+}
+
+double (*solutionPointer(const field::NekWriteEnum & field))(int, int)
+{
+  double (*f)(int, int);
+
+  checkFieldValidity(field);
+
+  switch (field)
+  {
+    case field::flux:
+      f = &get_flux;
+      break;
+    default:
+      mooseError("Unhandled NekWriteEnum in solutionPointer!");
+  }
+
+  return f;
+}
+
+double (*solutionPointer(const field::NekFieldEnum & field))(int, int)
+{
+  // we include this here as well, in addition to within the NekFieldInterface, because
+  // the NekRSProblem accesses these methods without inheriting from NekFieldInterface
+  checkFieldValidity(field);
+
+  double (*f)(int, int);
 
   switch (field)
   {
     case field::velocity_x:
-      f = &velocity_x;
+      f = &get_velocity_x;
       break;
     case field::velocity_y:
-      f = &velocity_y;
+      f = &get_velocity_y;
       break;
     case field::velocity_z:
-      f = &velocity_z;
+      f = &get_velocity_z;
       break;
     case field::velocity:
-      f = &velocity;
+      f = &get_velocity;
       break;
     case field::velocity_component:
       mooseError("The 'velocity_component' field is not compatible with the solutionPointer "
                  "interface!");
       break;
+    case field::velocity_x_squared:
+      f = &get_velocity_x_squared;
+      break;
+    case field::velocity_y_squared:
+      f = &get_velocity_y_squared;
+      break;
+    case field::velocity_z_squared:
+      f = &get_velocity_z_squared;
+      break;
     case field::temperature:
-      if (!hasTemperatureVariable())
-        mooseError("Cardinal cannot find 'temperature' "
-                   "because your Nek case files do not have a temperature variable!");
-      f = &temperature;
+      f = &get_temperature;
       break;
     case field::pressure:
-      f = &pressure;
+      f = &get_pressure;
       break;
     case field::scalar01:
-      if (!hasScalarVariable(1))
-        mooseError("Cardinal cannot find 'scalar01' "
-                   "because your Nek case files do not have a scalar01 variable!");
-      f = &scalar01;
+      f = &get_scalar01;
       break;
     case field::scalar02:
-      if (!hasScalarVariable(2))
-        mooseError("Cardinal cannot find 'scalar02' "
-                   "because your Nek case files do not have a scalar02 variable!");
-      f = &scalar02;
+      f = &get_scalar02;
       break;
     case field::scalar03:
-      if (!hasScalarVariable(3))
-        mooseError("Cardinal cannot find 'scalar03' "
-                   "because your Nek case files do not have a scalar03 variable!");
-      f = &scalar03;
+      f = &get_scalar03;
       break;
     case field::unity:
-      f = &unity;
+      f = &get_unity;
+      break;
+    case field::usrwrk00:
+      f = &get_usrwrk00;
+      break;
+    case field::usrwrk01:
+      f = &get_usrwrk01;
+      break;
+    case field::usrwrk02:
+      f = &get_usrwrk02;
       break;
     default:
       throw std::runtime_error("Unhandled 'NekFieldEnum'!");
@@ -1558,35 +1641,35 @@ double (*solutionPointer(const field::NekFieldEnum & field))(int)
   return f;
 }
 
-void (*solutionPointer(const field::NekWriteEnum & field))(int, dfloat)
+void (*solutionWritePointer(const field::NekWriteEnum & field))(int, dfloat)
 {
   void (*f)(int, dfloat);
 
   switch (field)
   {
     case field::flux:
-      f = &flux;
+      f = &set_flux;
       break;
     case field::heat_source:
-      f = &heat_source;
+      f = &set_heat_source;
       break;
     case field::x_displacement:
-      f = &x_displacement;
+      f = &set_x_displacement;
       break;
     case field::y_displacement:
-      f = &y_displacement;
+      f = &set_y_displacement;
       break;
     case field::z_displacement:
-      f = &z_displacement;
+      f = &set_z_displacement;
       break;
     case field::mesh_velocity_x:
-      f = &mesh_velocity_x;
+      f = &set_mesh_velocity_x;
       break;
     case field::mesh_velocity_y:
-      f = &mesh_velocity_y;
+      f = &set_mesh_velocity_y;
       break;
     case field::mesh_velocity_z:
-      f = &mesh_velocity_z;
+      f = &set_mesh_velocity_z;
       break;
     default:
       throw std::runtime_error("Unhandled NekWriteEnum!");
@@ -1595,45 +1678,69 @@ void (*solutionPointer(const field::NekWriteEnum & field))(int, dfloat)
   return f;
 }
 
+void (*solutionWritePointer(const field::NekFieldEnum & field))(int, dfloat)
+{
+  void (*f)(int, dfloat);
+
+  switch (field)
+  {
+    case field::temperature:
+      f = &set_temperature;
+      break;
+    default:
+      throw std::runtime_error("Unhandled NekFieldEnum in solutionWritePointer! Other write fields "
+                               "have not been added to this interface yet.");
+  }
+
+  return f;
+}
+
 void
-initializeDimensionalScales(const double U_ref,
-                            const double T_ref,
-                            const double dT_ref,
-                            const double L_ref,
-                            const double rho_ref,
-                            const double Cp_ref)
+initializeDimensionalScales(const double U,
+                            const double T,
+                            const double dT,
+                            const double L,
+                            const double rho,
+                            const double Cp,
+                            const double s01,
+                            const double ds01,
+                            const double s02,
+                            const double ds02,
+                            const double s03,
+                            const double ds03)
 {
-  scales.U_ref = U_ref;
-  scales.T_ref = T_ref;
-  scales.dT_ref = dT_ref;
-  scales.L_ref = L_ref;
-  scales.A_ref = L_ref * L_ref;
-  scales.V_ref = L_ref * L_ref * L_ref;
-  scales.rho_ref = rho_ref;
-  scales.Cp_ref = Cp_ref;
+  scales.U_ref = U;
+  scales.T_ref = T;
+  scales.dT_ref = dT;
+  scales.L_ref = L;
+  scales.A_ref = L * L;
+  scales.V_ref = L * L * L;
+  scales.rho_ref = rho;
+  scales.Cp_ref = Cp;
+  scales.t_ref = L / U;
+  scales.P_ref = rho * U * U;
 
-  scales.flux_ref = rho_ref * U_ref * Cp_ref * dT_ref;
-  scales.source_ref = scales.flux_ref / L_ref;
+  scales.s01_ref = s01;
+  scales.ds01_ref = ds01;
+  scales.s02_ref = s02;
+  scales.ds02_ref = ds02;
+  scales.s03_ref = s03;
+  scales.ds03_ref = ds03;
 
-  scales.nondimensional_T = (std::abs(dT_ref - 1.0) > 1e-6) || (std::abs(T_ref) > 1e-6);
-}
-
-double
-referenceFlux()
-{
-  return scales.flux_ref;
-}
-
-double
-referenceSource()
-{
-  return scales.source_ref;
+  scales.flux_ref = rho * U * Cp * dT;
+  scales.source_ref = scales.flux_ref / L;
 }
 
 double
 referenceLength()
 {
   return scales.L_ref;
+}
+
+double
+referenceTime()
+{
+  return scales.t_ref;
 }
 
 double
@@ -1648,48 +1755,129 @@ referenceVolume()
   return scales.V_ref;
 }
 
-void
-dimensionalize(const field::NekFieldEnum & field, double & value)
+Real
+nondimensionalAdditive(const field::NekFieldEnum & field)
+{
+  switch (field)
+  {
+    case field::temperature:
+      return scales.T_ref;
+    case field::scalar01:
+      return scales.s01_ref;
+    case field::scalar02:
+      return scales.s02_ref;
+    case field::scalar03:
+      return scales.s03_ref;
+    default:
+      return 0;
+  }
+}
+
+Real
+nondimensionalAdditive(const field::NekWriteEnum & field)
+{
+  switch (field)
+  {
+    case field::flux:
+    case field::heat_source:
+    case field::x_displacement:
+    case field::y_displacement:
+    case field::z_displacement:
+    case field::mesh_velocity_x:
+    case field::mesh_velocity_y:
+    case field::mesh_velocity_z:
+      return 0.0;
+    default:
+      mooseError("Unhandled NekWriteEnum in nondimensionalAdditive!");
+  }
+}
+
+Real
+nondimensionalDivisor(const field::NekWriteEnum & field)
+{
+  switch (field)
+  {
+    case field::flux:
+      return scales.flux_ref;
+    case field::heat_source:
+      return scales.source_ref;
+    case field::x_displacement:
+    case field::y_displacement:
+    case field::z_displacement:
+      return scales.L_ref;
+    case field::mesh_velocity_x:
+    case field::mesh_velocity_y:
+    case field::mesh_velocity_z:
+      return scales.U_ref;
+    default:
+      mooseError("Unhandled NekWriteEnum in nondimensionalDivisor!");
+  }
+}
+
+Real
+nondimensionalDivisor(const field::NekFieldEnum & field)
 {
   switch (field)
   {
     case field::velocity_x:
-      value = value * scales.U_ref;
-      break;
     case field::velocity_y:
-      value = value * scales.U_ref;
-      break;
     case field::velocity_z:
-      value = value * scales.U_ref;
-      break;
     case field::velocity:
-      value = value * scales.U_ref;
-      break;
     case field::velocity_component:
-      mooseError(
-          "The 'velocity_component' field is incompatible with the dimensionalize interface!");
-      break;
+      return scales.U_ref;
+    case field::velocity_x_squared:
+    case field::velocity_y_squared:
+    case field::velocity_z_squared:
+      return scales.U_ref * scales.U_ref;
     case field::temperature:
-      value = value * scales.dT_ref;
-      break;
+      return scales.dT_ref;
     case field::pressure:
-      value = value * scales.rho_ref * scales.U_ref * scales.U_ref;
-      break;
+      return scales.P_ref;
     case field::scalar01:
-      // no dimensionalization needed
-      break;
+      return scales.ds01_ref;
     case field::scalar02:
-      // no dimensionalization needed
-      break;
+      return scales.ds02_ref;
     case field::scalar03:
-      // no dimensionalization needed
-      break;
+      return scales.ds03_ref;
     case field::unity:
       // no dimensionalization needed
-      break;
+      return 1.0;
+    case field::usrwrk00:
+      return scratchUnits(0);
+    case field::usrwrk01:
+      return scratchUnits(1);
+    case field::usrwrk02:
+      return scratchUnits(2);
     default:
       throw std::runtime_error("Unhandled 'NekFieldEnum'!");
   }
+}
+
+Real
+scratchUnits(const int slot)
+{
+  if (indices.flux != -1 && slot == indices.flux / nekrs::fieldOffset())
+    return scales.flux_ref;
+  else if (indices.heat_source != -1 && slot == indices.heat_source / nekrs::fieldOffset())
+    return scales.source_ref;
+  else if (is_nondimensional)
+  {
+    // TODO: we are lazy and did not include all the usrwrk indices
+    mooseDoOnce(mooseWarning(
+        "The units of 'usrwrk0" + std::to_string(slot) +
+        "' are unknown, so we cannot dimensionalize any objects using 'field = usrwrk0" +
+        std::to_string(slot) +
+        "'. The output for this quantity will be given in non-dimensional form.\n\nYou will need "
+        "to manipulate the data manually from Cardinal if you need to dimensionalize it."));
+  }
+
+  return 1.0;
+}
+
+void
+nondimensional(const bool n)
+{
+  is_nondimensional = n;
 }
 
 template <>

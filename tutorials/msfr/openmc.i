@@ -112,13 +112,13 @@ tmax = 1150.0
     type = MultiAppGeneralFieldNearestLocationTransfer
     from_multi_app = nek
     variable = temp
-    source_variable = temp
+    source_variable = temperature
   []
   [power_to_nek]
     type = MultiAppGeneralFieldNearestLocationTransfer
     to_multi_app = nek
     source_variable = kappa_fission
-    variable = heat_source
+    variable = source
   []
   [power_integral_to_nek]
     type = MultiAppPostprocessorTransfer
@@ -143,7 +143,8 @@ tmax = 1150.0
     type = KEigenvalue
   []
   [k_std_dev]
-    type = KStandardDeviation
+    type = KEigenvalue
+    output = 'std_dev'
   []
   [max_tally_err]
     type = TallyRelativeError

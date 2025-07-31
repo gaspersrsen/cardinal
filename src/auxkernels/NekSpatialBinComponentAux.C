@@ -30,15 +30,14 @@ NekSpatialBinComponentAux::validParams()
   params.addRequiredRangeCheckedParam<unsigned int>(
       "component", "component < 3", "Component of user object");
   params.addClassDescription(
-      "Populates an auxiliary variable with a component-wise spatial value returned from a "
-      "UserObject spatialValue method.");
+      "Component-wise (x, y, z) spatial value returned from a Nek user object");
   return params;
 }
 
 NekSpatialBinComponentAux::NekSpatialBinComponentAux(const InputParameters & parameters)
   : SpatialUserObjectAux(parameters), _component(getParam<unsigned int>("component"))
 {
-  // by requiring this userobject, we automatically ensure correct NekRSProblemBase-type problems
+  // by requiring this userobject, we automatically ensure correct NekRSProblem-type problems
   // because the NekUserObject checks for compatibility
   _bin_uo = dynamic_cast<const NekSpatialBinUserObject *>(&_user_object);
 

@@ -9,14 +9,30 @@ fluid_solid_interface = '1 2 7'
 [Problem]
   type = NekRSProblem
   casename = 'fluid'
+  n_usrwrk_slots = 1
 
-  nondimensional = true
-  U_ref = 0.0575
-  T_ref = 923.15
-  dT_ref = 10.0
-  L_ref = 0.006
-  rho_0 = 1962.13
-  Cp_0 = 2416.0
+  [FieldTransfers]
+    [avg_flux]
+      type = NekBoundaryFlux
+      direction = to_nek
+      usrwrk_slot = 0
+      postprocessor_to_conserve = flux_integral
+    []
+    [temp]
+      type = NekFieldVariable
+      direction = from_nek
+      field = temperature
+    []
+  []
+
+  [Dimensionalize]
+    U = 0.0575
+    T = 923.15
+    dT = 10.0
+    L = 0.006
+    rho = 1962.13
+    Cp = 2416.0
+  []
 []
 
 [Executioner]

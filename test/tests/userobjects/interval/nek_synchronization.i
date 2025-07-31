@@ -1,18 +1,36 @@
 [Problem]
-  type = NekRSStandaloneProblem
+  type = NekRSProblem
   casename = 'brick'
-  output = 'velocity'
 
-  nondimensional = true
-  L_ref = 2.0
-  U_ref = 1.0
-  rho_0 = 834.5
-  Cp_0 = 1228.0
-  T_ref = 573.0
-  dT_ref = 10.0
+  [Dimensionalize]
+    L = 2.0
+    U = 1.0
+    rho = 834.5
+    Cp = 1228.0
+    T = 573.0
+    dT = 10.0
+  []
 
   synchronization_interval = constant
   constant_interval = 3
+
+  [FieldTransfers]
+    [vel_x]
+      type = NekFieldVariable
+      direction = from_nek
+      field = velocity_x
+    []
+    [vel_y]
+      type = NekFieldVariable
+      direction = from_nek
+      field = velocity_y
+    []
+    [vel_z]
+      type = NekFieldVariable
+      direction = from_nek
+      field = velocity_z
+    []
+  []
 []
 
 [Mesh]
@@ -24,7 +42,7 @@
 [Postprocessors]
   [vz_in]
     type = SideAverageValue
-    variable = 'vel_z'
+    variable = vel_z
     boundary = '1'
   []
 []

@@ -66,14 +66,12 @@
     source_variable = temp
     from_multi_app = nek
     variable = nek_temp
-    search_value_conflicts = false
   []
-  [avg_flux]
+  [flux]
     type = MultiAppGeneralFieldNearestLocationTransfer
-    source_variable = avg_flux
+    source_variable = flux
     to_multi_app = nek
-    variable = avg_flux
-    search_value_conflicts = false
+    variable = flux
   []
   [flux_integral_to_nek]
     type = MultiAppPostprocessorTransfer
@@ -86,19 +84,19 @@
 [AuxVariables]
   [nek_temp]
   []
-  [avg_flux]
+  [flux]
     family = MONOMIAL
     order = CONSTANT
   []
 []
 
 [AuxKernels]
-  [avg_flux]
+  [flux]
     type = DiffusionFluxAux
     diffusion_variable = temp
     component = normal
     diffusivity = thermal_conductivity
-    variable = avg_flux
+    variable = flux
     boundary = '1'
   []
 []

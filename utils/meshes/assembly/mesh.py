@@ -4,7 +4,11 @@ import math
 import sys
 import numpy as np
 from argparse import ArgumentParser
-import csv
+
+# Common meshing utilities
+this_dir = os.path.dirname(os.path.realpath(__file__))
+sys.path.append(os.path.join(this_dir, '..'))
+from mesh_utils import build_pattern
 
 # Create a mesh for the fluid region inside a hexagonal duct.
 # The sideset IDs are:
@@ -31,6 +35,7 @@ script_dir = os.path.dirname(__file__)
 sys.path.append(script_dir)
 import mesh_settings as ms
 
+nondimensional = ms.nondimensional
 pin_diameter = ms.pin_diameter
 pin_pitch = ms.pin_pitch
 flat_to_flat = ms.flat_to_flat
@@ -188,19 +193,7 @@ def hydraulic_diameter(nrings, bundle_pitch, pin_diameter, wire_diameter = 0, wi
 
 # Get the 'pattern' needed for the pins
 n_rings = rings(n_pins)
-first_row = int(elements_in_ring(n_rings) / 6) + 1
-last_row = first_row + n_rings - 1
-
-pattern = "'"
-for i in range(n_rings):
-  for j in range(first_row + i):
-    pattern += " 0"
-  pattern += ";"
-for i in range(n_rings - 1):
-  for j in range(last_row - 1 - i):
-    pattern += " 0"
-  pattern += ";"
-pattern += "'"
+pattern = build_pattern(n_rings)
 
 # Get the coordinates of the pin centers
 pin_centers = lattice_centers(n_rings, pin_pitch)
@@ -234,7 +227,11 @@ for i in range(e_per_bl):
 
 # calculate hydraulic diameter for a wire-wrap bundle (no curved corners)
 inlet_area = flow_area(n_rings, flat_to_flat, pin_diameter) - n_pins * math.pi * (wire_diameter ** 2) / 4.0
-hydraulic_d = hydraulic_diameter(n_rings, flat_to_flat, pin_diameter, wire_diameter, wire_pitch)
+
+if (nondimensional):
+  hydraulic_d = hydraulic_diameter(n_rings, flat_to_flat, pin_diameter, wire_diameter, wire_pitch)
+else:
+  hydraulic_d = 1.0
 
 # Write a file that contains all the essential meshing pre-processor definitions
 with open('mesh_info.i', 'w') as f:
@@ -258,6 +255,7 @@ with open('mesh_info.i', 'w') as f:
   f.write("pattern=" + str(pattern) + "\n")
   f.write("pin_centers=" + str(pin_centers) + "\n")
   f.write("corner_smoothing='" + corner_smoothing + "'\n")
+  f.write("corners=" + str(corner_radius > 0) + "\n")
 
 if (args.generate):
   home = os.getenv('HOME')

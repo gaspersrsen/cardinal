@@ -27,17 +27,29 @@ dT = ${fparse power / mdot / Cp}
 [Problem]
   type = NekRSProblem
   casename = 'fluid'
+  n_usrwrk_slots = 1
 
-  nondimensional = true
-  L_ref = ${hydraulic_diameter}
-  T_ref = ${inlet_T}
-  U_ref = ${U_ref}
-  dT_ref = ${dT}
+  [Dimensionalize]
+    L = ${hydraulic_diameter}
+    T = ${inlet_T}
+    U = ${U_ref}
+    dT = ${dT}
+    rho = ${rho}
+    Cp = ${Cp}
+  []
 
-  rho_0 = ${rho}
-  Cp_0 = ${Cp}
+  [FieldTransfers]
+    [flux]
+      type = NekBoundaryFlux
+      direction = to_nek
+      usrwrk_slot = 0
+    []
+    [temperature]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+  []
 
-  has_heat_source = false
   synchronization_interval = parent_app
 []
 

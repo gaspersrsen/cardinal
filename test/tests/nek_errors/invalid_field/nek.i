@@ -1,5 +1,5 @@
 [Problem]
-  type = NekRSStandaloneProblem
+  type = NekRSProblem
   casename = 'pyramid'
 []
 
@@ -17,7 +17,7 @@
 []
 
 [Postprocessors]
-  [max_T]
+  [max]
     type = NekVolumeExtremeValue
     field = temperature
   []

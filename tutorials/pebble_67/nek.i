@@ -1,8 +1,8 @@
 Re = 1460.0
 dp = 0.06
 cylinder_diameter = ${fparse 4.4 * dp}
-rho = 3.645
-Cp = 3121.0
+density = 3.645
+C = 3121.0
 mu = 2.93e-5
 power = 2400.0
 inlet_area = ${fparse pi * cylinder_diameter^2 / 4.0}
@@ -16,18 +16,40 @@ inlet_area = ${fparse pi * cylinder_diameter^2 / 4.0}
 [Problem]
   type = NekRSProblem
   casename = 'pb67'
-  output = 'velocity'
-  has_heat_source = false
   n_usrwrk_slots = 2
 
-  nondimensional = true
-  L_ref = ${dp}
-  U_ref = ${fparse Re * mu / rho / dp}
-  T_ref = 523.0
-  dT_ref = ${fparse power * dp / Re / inlet_area / mu / Cp}
+  [Dimensionalize]
+    L = ${dp}
+    U = ${fparse Re * mu / density / dp}
+    T = 523.0
+    dT = ${fparse power * dp / Re / inlet_area / mu / C}
+    rho = ${density}
+    Cp = ${C}
+  []
 
-  rho_0 = ${rho}
-  Cp_0 = ${Cp}
+  [FieldTransfers]
+    [flux]
+      type = NekBoundaryFlux
+      direction = to_nek
+      usrwrk_slot = 0
+    []
+    [temperature]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+    [velocity_x]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+    [velocity_y]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+    [velocity_z]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+  []
 
   synchronization_interval = parent_app
 []

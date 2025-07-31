@@ -41,8 +41,7 @@ Re=\frac{\rho VD}{\mu}
 We will apply a uniform heat flux on the pebble surface. The pebble surface heat flux is selected to
 give a pebble power of approximately 893 W (giving a bulk fluid temperature rise
 of 50 K).
-In the
-[conjugate heat transfer tutorials](tutorials/cht.md), this heat flux will later be
+In the [conjugate heat transfer tutorials](cht.md), this heat flux will later be
 replaced by coupling to MOOSE.
 
 !table id=table1 caption=Geometric and operating conditions for the single-pebble flow. Fluid properties correspond to water at standard atmosphere and temperature.
@@ -112,7 +111,8 @@ Follow the on-screen prompts. For this case, we have:
 - 0 periodic surface pairs (this is nonzero when applying periodic boundary conditions)
 - output file name is `pebble.re2` (you only need to provide `pebble` as the output name)
 
-This will create a mesh named `pebble.re2`.
+This will create a mesh named `pebble.re2`. Alternatively, you can use the `pebble.re2` file which is version-controlled in the repository.
+
 NekRS is a spectral element code, which means that the solution in each element is represented
 as an $N$-th order Lagrange polynomial (in each direction).
 An illustration for a 5th-order NekRS solution is shown in [gll_mesh] for a 2-D element. Each
@@ -196,6 +196,7 @@ For temperature/passive scalars, some common boundary condition strings are show
 | `t` | Dirichlet value | `scalarDirichletConditions` |
 | `f` | Neumann flux | `scalarNeumannConditions` |
 | `I` | insulated (zero flux) | --- |
+| `o` | Outflow thermal energy | --- |
 
 When you populate `boundaryTypeMap` in the input file, you simply list the
 character string for your desired boundary condition in the same order as the sidesets

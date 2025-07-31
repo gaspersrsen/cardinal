@@ -116,6 +116,10 @@ M. Eltawila, A.J. Novak,
 
 # Molten Salt Reactors
 
+M. Dalinger, E. Merzari, S. Lee, and C. Emler,
+["High-Fidelity Modelling of the Molten Salt Fast Reactor"](https://www.researchgate.net/publication/393478397_High-Fidelity_Modelling_of_the_Molten_Salt_Fast_Reactor)
+*Proceedings of NURETH* (2025)
+
 A.J. Novak, H. Brooks, P. Shriwise, and A. Davis,
 ["Monte Carlo Multiphysics Simulation on Adaptive Unstructured Mesh Geometry"](https://www.sciencedirect.com/science/article/pii/S0029549324006897)
 429 (113589)
@@ -126,6 +130,10 @@ A.J. Novak, H. Brooks, P. Shriwise, A. Hegazy, and A. Davis,
 *Proceedings of M&C* (2023)
 
 # Lead Fast Reactors
+
+Y. Yu, H. Park, A. Novak, and E. Shemon,
+["High Fidelity Multiphysics Tightly Coupled Model for a Lead Cooled Fast Reactor Concept and Application to Statistical Calculation of Hot Channel Factors"](https://linkinghub.elsevier.com/retrieve/pii/S0029549325000925)
+435 (113915) *Nuclear Engineering and Design* (2025)
 
 H. Park, Y. Yu, E. Shemon, and A. Novak,
 ["Development of a Coupled Code System with Griffin, MOOSE and NekRS for Hot Channel Factor Evaluation in Fast Reactor"](https://www.researchgate.net/publication/373330910_Development_of_Coupled_Code_System_with_Griffin_MOOSE_and_NekRS_for_Hot_Channel_Factor_Evaluation_in_Fast_Reactors)
@@ -152,6 +160,11 @@ A.J. Novak, A. Chaube, D.R. Shaver, C.S. Brooks,
 A.J. Novak, P. Shriwise, R. Rahaman, P.K. Romano, E. Merzari, and D. Gaston,
 ["Coupled Monte Carlo Transport and Conjugate Heat Transfer for Wire-Wrapped Bundles Within the MOOSE Framework"](https://www.researchgate.net/publication/359121160_COUPLED_MONTE_CARLO_TRANSPORT_AND_CONJUGATE_HEAT_TRANSFER_FOR_WIRE-WRAPPED_BUNDLES_WITHIN_THE_MOOSE_FRAMEWORK)
 *Proceedings of Nureth* (2022)
+
+# Space Nuclear Reactors
+
+M. Dalinger, E. Merzari, T. Nguyen, M. Seneca, and R. Martineau, ["Multiphysics Modeling of SNAP 10A/2 Space Reactor with Cardinal"](https://www.ans.org/meetings/nets2025/session/view-2957/)
+*Proceedings of NETS* (2025)
 
 # Fusion Devices
 
@@ -184,6 +197,12 @@ A. Huxford, V. Petrov, A. Manera, V. Coppo Leite, E. Merzari, and L. Zou
 A. Chaube, A. Novak, H. Yuan, E. Merzari, D.R. Shaver, P.F. Fischer, and C. Brooks,
 ["A Preliminary Fluid-Structure Coupling of NekRS and MOOSE via Cardinal"](https://ui.adsabs.harvard.edu/abs/2023arXiv230811777C/abstract)
 *Proceedings of M&C* (2023)
+
+# Adaptive Mesh Refinement
+
+K. C. Sawatzky, E. W. Ahammed, P. P.H. Wilson, P. C. Shriwise, P. K. Romano, A. J. Novak,
+["Adaptive Mesh Refinement Applied to Unstructured Mesh Tallies in Cardinal-OpenMC"](https://www.ans.org/meetings/ac2025/sessions/attachment/paper-12816/)
+*Proceedings of the ANS Annual Meeting* (2025)
 
 # AI/ML
 
@@ -230,3 +249,7 @@ B. Feng, J. Fang, T. Hua, N. Stauff, A. Novak, L. Zou, R. Hu, P. Balestra, D. Re
 B. Feng, J. Fang, N. Stauff, T. Hua, L. Zou, R. Hu, D. Shaver, and A. Novak,
 ["Development of Advanced Reactor Models for Virtual Test Bed Using NEAMS Tools"](https://www.osti.gov/biblio/1832109)
 *Argonne National Laboratory*, ANL-21/28 (2021)
+
+Mohamed Elkamash, Lise Charlot, Mustafa K. Jaradat, Shikhar Kumar, Joffrey Dorville, Emily Shemon, Paul Romano, and April J. Novak
+["Development of The DOME Shield Model for The NRIC Virtual Test Bed"](https://www.ans.org/pubs/transactions/article-57160/)
+*Proceedings of ANS Winter Conference and Expo* (2024)

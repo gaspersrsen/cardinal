@@ -24,12 +24,14 @@
   cell_level = 0
   normalize_by_global_tally = false
 
+  source_rate_normalization = 'kappa_fission'
+
   max_batches = 200
 
   [Tallies]
     [Cell]
       type = CellTally
-      blocks = '100'
+      block = '100'
       score = 'damage_energy kappa_fission'
 
       trigger = 'rel_err rel_err'

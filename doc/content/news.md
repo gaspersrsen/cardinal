@@ -3,6 +3,13 @@
 This page summarizes recent changes to Cardinal. Any months not included did not have
 significant changes to report.
 
+### 2025
+
+- [July 2025](news/july2025.md)
+- [June 2025](news/june2025.md)
+- [April 2025](news/april2025.md)
+- [March 2025](news/march2025.md)
+
 ### 2024
 
 - [October 2024](news/october2024.md)

@@ -9,12 +9,12 @@
     type = CSVDiff
     input = ht.i
     csvdiff = ht_out_nek0.csv
-    cli_args = 'MultiApps/nek/cli_args="UserObjects/k/value=6.5"'
+    cli_args = 'MultiApps/nek/cli_args="Problem/ScalarTransfers/k/value=6.5"'
     requirement = "The system shall reproduce analytic temperature distributions in a two-slab domain with "
                   "MOOSE solving heat conduction in part of the domain, and NekRS solving for heat conduction "
                   "in the remaining, with coupling via flux and temperature boundary conditions at the interface. "
                   "We compare against analytic solutions for steady-state heat transfer."
-    required_objects = 'NekRSProblem'
+    capabilities = 'nekrs'
   []
   [multi]
     type = CSVDiff
@@ -31,6 +31,6 @@
     requirement = "The system shall allow NekRS thermal conductivity to be perturbed by the stochastic tools "
                   "module. We compare peak temperature against an analytic solution to confirm that NekRS "
                   "is solving the correct model."
-    required_objects = 'NekRSProblem'
+    capabilities = 'nekrs'
   []
 []

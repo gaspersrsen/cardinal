@@ -85,7 +85,7 @@ CardinalApp::validParams()
   return params;
 }
 
-CardinalApp::CardinalApp(InputParameters parameters) : MooseApp(parameters)
+CardinalApp::CardinalApp(const InputParameters & parameters) : MooseApp(parameters)
 {
   CardinalApp::registerAll(_factory, _action_factory, _syntax);
 }
@@ -170,6 +170,33 @@ CardinalApp::registerApps()
 #ifdef ENABLE_IAPWS95
   IAPWS95App::registerApps();
 #endif
+
+  {
+    const std::string doc = "nekRS computational fluid dynamics coupling ";
+#ifdef ENABLE_NEK_COUPLING
+    addCapability("nekrs", true, doc + "is available.");
+#else
+    addCapability("nekrs", false, doc + "is not available.");
+#endif
+  }
+
+  {
+    const std::string doc = "OpenMC monte carlo particle transport coupling ";
+#ifdef ENABLE_OPENMC_COUPLING
+    addCapability("openmc", true, doc + "is available.");
+#else
+    addCapability("openmc", false, doc + "is not available.");
+#endif
+  }
+
+  {
+    const std::string doc = "DAGMC Direct Accelerated Geometry Monte Carlo coupling ";
+#ifdef ENABLE_DAGMC
+    addCapability("dagmc", true, doc + "is available.");
+#else
+    addCapability("dagmc", false, doc + "is not available.");
+#endif
+  }
 }
 
 void
@@ -187,10 +214,38 @@ CardinalApp::associateSyntaxInner(Syntax & syntax, ActionFactory & /* action_fac
   // Add the [Problem/Tallies] block
   registerSyntaxTask("AddTallyAction", "Problem/Tallies/*", "add_tallies");
   registerMooseObjectTask("add_tallies", Tally, false);
-  addTaskDependency("add_tallies",
-                    "add_filters"); // Make sure filters are constructed before tallies.
+  // Make sure filters are constructed before tallies.
+  addTaskDependency("add_tallies", "add_filters");
   // Can only add external auxvars after the tallies have been added.
   addTaskDependency("add_external_aux_variables", "add_tallies");
+
+  // Register a modify outputs task to enable variable hiding in the MGXS action.
+  registerTask("modify_outputs", true /* is required */);
+  addTaskDependency("modify_outputs", "common_output");
+  addTaskDependency("modify_outputs", "add_tallies");
+  addTaskDependency("add_output", "modify_outputs");
+
+  // Add the MGXS block.
+  registerSyntax("SetupMGXSAction", "Problem/MGXS");
+#endif
+
+#ifdef ENABLE_NEK_COUPLING
+  // Add the [Problem/Dimensionalize] block
+  registerSyntax("DimensionalizeAction", "Problem/Dimensionalize");
+  registerTask("add_dimensionalization", false /* is required */);
+  addTaskDependency("add_dimensionalization", "init_mesh");
+
+  // Add the [Problem/FieldTransfers] block
+  registerSyntaxTask("AddFieldTransferAction", "Problem/FieldTransfers/*", "add_field_transfers");
+  registerMooseObjectTask("add_field_transfers", FieldTransfer, false);
+  addTaskDependency("add_field_transfers", "init_mesh");
+  addTaskDependency("add_external_aux_variables", "add_field_transfers");
+
+  // Add the [Problem/ScalarTransfers] block, which will be executed after the field transfers
+  registerSyntaxTask(
+      "AddScalarTransferAction", "Problem/ScalarTransfers/*", "add_scalar_transfers");
+  registerMooseObjectTask("add_scalar_transfers", ScalarTransfer, false);
+  addTaskDependency("add_scalar_transfers", "add_field_transfers");
 #endif
 
   registerTask("add_heat_source_ic", false /* is required */);

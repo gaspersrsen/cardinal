@@ -27,9 +27,12 @@ CellTally::validParams()
   auto params = TallyBase::validParams();
   params.addClassDescription("A class which implements distributed cell tallies.");
   params.addParam<std::vector<SubdomainName>>(
-      "blocks",
+      "block",
       "Subdomains for which to add tallies in OpenMC. If not provided, cell "
       "tallies will be applied over the entire mesh.");
+  params.addParam<std::vector<SubdomainName>>("blocks",
+                                              "This parameter is deprecated, use 'block' instead!");
+
   params.addParam<bool>(
       "check_equal_mapped_tally_volumes",
       false,
@@ -50,27 +53,30 @@ CellTally::CellTally(const InputParameters & parameters)
     _check_equal_mapped_tally_volumes(getParam<bool>("check_equal_mapped_tally_volumes")),
     _equal_tally_volume_abs_tol(getParam<Real>("equal_tally_volume_abs_tol"))
 {
-  if (isParamValid("blocks"))
-  {
-    auto block_names = getParam<std::vector<SubdomainName>>("blocks");
-    if (block_names.empty())
-      paramError("blocks", "Subdomain names must be provided if using 'blocks'!");
+  if (isParamSetByUser("blocks"))
+    mooseError("This parameter is deprecated, use 'block' instead!");
 
-    auto block_ids = _mesh.getSubdomainIDs(block_names);
+  if (isParamValid("block"))
+  {
+    auto block_names = getParam<std::vector<SubdomainName>>("block");
+    if (block_names.empty())
+      paramError("block", "Subdomain names must be provided if using 'block'!");
+
+    auto block_ids = _openmc_problem.getMooseMesh().getSubdomainIDs(block_names);
     std::copy(
         block_ids.begin(), block_ids.end(), std::inserter(_tally_blocks, _tally_blocks.end()));
 
     // Check to make sure all of the blocks are in the mesh.
-    const auto & subdomains = _mesh.meshSubdomains();
+    const auto & subdomains = _openmc_problem.getMooseMesh().meshSubdomains();
     for (std::size_t b = 0; b < block_names.size(); ++b)
       if (subdomains.find(block_ids[b]) == subdomains.end())
-        paramError("blocks",
-                   "Block '" + block_names[b] + "' specified in 'blocks' not found in mesh!");
+        paramError("block",
+                   "Block '" + block_names[b] + "' specified in 'block' not found in mesh!");
   }
   else
   {
     // Tally over all mesh blocks if no blocks are provided.
-    for (const auto & s : _mesh.meshSubdomains())
+    for (const auto & s : _openmc_problem.getMooseMesh().meshSubdomains())
       _tally_blocks.insert(s);
   }
 }
@@ -88,8 +94,7 @@ CellTally::spatialFilter()
   auto tally_cells = getTallyCells();
   std::vector<openmc::CellInstance> cells;
   for (const auto & c : tally_cells)
-    cells.push_back(
-        {gsl::narrow_cast<gsl::index>(c.first), gsl::narrow_cast<gsl::index>(c.second)});
+    cells.push_back({c.first, c.second});
 
   _cell_filter = dynamic_cast<openmc::CellInstanceFilter *>(openmc::Filter::create("cellinstance"));
   _cell_filter->set_cell_instances(cells);
@@ -117,18 +122,18 @@ CellTally::storeResultsInner(const std::vector<unsigned int> & var_numbers,
       if (!_cell_has_tally[cell_info])
         continue;
 
-      Real power_fraction = tally_vals[local_score](ext_bin * _cell_filter->n_bins() + i++);
+      Real unnormalized_tally = tally_vals[local_score](ext_bin * _cell_filter->n_bins() + i++);
 
       // divide each tally value by the volume that it corresponds to in MOOSE
       // because we will apply it as a volumetric tally
-      Real volumetric_power = power_fraction;
-      volumetric_power *= norm_by_src_rate ? _openmc_problem.tallyMultiplier(global_score) /
+      Real volumetric_tally = unnormalized_tally;
+      volumetric_tally *= norm_by_src_rate ? _openmc_problem.tallyMultiplier(global_score) /
                                                  _openmc_problem.cellMappedVolume(cell_info)
                                            : 1.0;
-      total += power_fraction;
+      total += _ext_bins_to_skip[ext_bin] ? 0.0 : unnormalized_tally;
 
       auto var = var_numbers[_num_ext_filter_bins * local_score + ext_bin];
-      fillElementalAuxVariable(var, c.second, volumetric_power);
+      fillElementalAuxVariable(var, c.second, volumetric_tally);
     }
   }
 
@@ -175,7 +180,7 @@ CellTally::checkCellMappedSubdomains()
                  " maps to blocks with different tally settings!\n"
                  "Block " +
                  Moose::stringify(block_in_tallies) +
-                 " is in 'blocks', but "
+                 " is in 'block', but "
                  "block " +
                  Moose::stringify(block_not_in_tallies) + " is not.");
 

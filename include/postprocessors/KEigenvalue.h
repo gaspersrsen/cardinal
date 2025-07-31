@@ -18,22 +18,45 @@
 
 #pragma once
 
-#include "OpenMCPostprocessor.h"
+#include "GeneralPostprocessor.h"
+
+#include "OpenMCBase.h"
 #include "CardinalEnums.h"
 
 /**
  * Get the k-effective eigenvalue computed by OpenMC.
  */
-class KEigenvalue : public OpenMCPostprocessor
+class KEigenvalue : public GeneralPostprocessor, public OpenMCBase
 {
 public:
   static InputParameters validParams();
 
   KEigenvalue(const InputParameters & parameters);
 
+  virtual void initialize() override {}
+  virtual void execute() override {}
+
   virtual Real getValue() const override;
 
 protected:
+  /**
+   * A function which computes the mean value of k_{eff}.
+   * @return the mean value of the k-eigenvalue
+   */
+  Real kMean() const;
+
+  /**
+   * A function which computes the standard deviation of k_{eff}.
+   * @return the standard deviation of the k-eigenvalue
+   */
+  Real KStandardDeviation() const;
+
+  /**
+   * A function which computes the relative error of k_{eff}.
+   * @return the relative error of the k-eigenvalue
+   */
+  Real kRelativeError() const;
+
   /**
    * Type of k-effective value to report. Options:
    * collision, absorption, tracklength, and combined (default).
@@ -43,4 +66,7 @@ protected:
    * and tracklength estimates.
    */
   const eigenvalue::EigenvalueEnum _type;
+
+  /// The value of the kinetics parameter to output.
+  const statistics::OutputEnum _output;
 };

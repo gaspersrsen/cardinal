@@ -1,13 +1,26 @@
 [Mesh]
   type = NekRSMesh
-  boundary = '1 2'
+  boundary = '1 4'
 []
 
 [Problem]
   type = NekRSProblem
   casename = 'sfr_7pin'
-  conserve_flux_by_sideset = true
   synchronization_interval = parent_app
+  n_usrwrk_slots = 1
+
+  [FieldTransfers]
+    [heat_flux]
+      type = NekBoundaryFlux
+      usrwrk_slot = 0
+      direction = to_nek
+      conserve_flux_by_sideset = true
+    []
+    [temperature]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+  []
 []
 
 [Executioner]
@@ -30,7 +43,7 @@
   []
   [duct_flux_in_nek]
     type = NekHeatFluxIntegral
-    boundary = '2'
+    boundary = '4'
   []
   [max_nek_T]
     type = NekVolumeExtremeValue

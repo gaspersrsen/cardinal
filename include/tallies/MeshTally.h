@@ -36,7 +36,7 @@ public:
   MeshTally(const InputParameters & parameters);
 
   /**
-   * A function to generate the cell filter needed by this object.
+   * A function to generate the mesh filter needed by this object.
    * @return a pair where the first entry is the filter index in the global filter array and the
    * second entry is an OpenMC unstructured mesh filter
    */
@@ -70,7 +70,7 @@ protected:
    * each element. This function performs as many checks as possible to ensure that the meshes
    * are indeed identical.
    */
-  void checkMeshTemplateAndTranslations() const;
+  void checkMeshTemplateAndTranslations();
 
   /**
    * Mesh template file to use for creating mesh tallies in OpenMC; currently, this mesh
@@ -111,6 +111,6 @@ protected:
    * TODO: Fix this in OpenMC
    */
   std::unique_ptr<libMesh::ReplicatedMesh> _libmesh_mesh_copy;
-  /// A mapping between the elements in '_libmesh_mesh_copy' and the elements in the MooseMesh.
-  std::vector<unsigned int> _active_to_total_mapping;
+  /// A mapping between the OpenMC bins (active block restricted elements) and all elements.
+  std::vector<unsigned int> _bin_to_element_mapping;
 };

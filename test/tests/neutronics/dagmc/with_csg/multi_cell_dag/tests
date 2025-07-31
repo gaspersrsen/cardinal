@@ -1,4 +1,7 @@
 [Tests]
+  issues = '#1177'
+  design = 'MOABSkinner.md OpenMCCellAverageProblem.md'
+
   [multi_dag_uni_cells]
     type = RunException
     input = openmc.i
@@ -6,6 +9,6 @@
                  "fill at most once."
     requirement = "The system shall error if the DAGMC universe is used by multiple cells. If so, the "
                   "DAGMC geometry is replicated and so the skinner will produce an incorrect skin."
-    required_objects = 'MoabSkinner'
+    capabilities = 'dagmc'
   []
 []

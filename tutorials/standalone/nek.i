@@ -5,9 +5,27 @@
 []
 
 [Problem]
-  type = NekRSStandaloneProblem
+  type = NekRSProblem
   casename = 'turbPipe'
-  output = 'pressure velocity'
+
+  [FieldTransfers]
+    [pressure]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+    [velocity_x]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+    [velocity_y]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+    [velocity_z]
+      type = NekFieldVariable
+      direction = from_nek
+    []
+  []
 []
 
 [Postprocessors]

@@ -33,8 +33,13 @@ MooseEnum getRelaxationEnum();
 MooseEnum getTallyTriggerEnum();
 MooseEnum getInitialPropertiesEnum();
 MultiMooseEnum getTallyScoreEnum();
+MultiMooseEnum getParticleFilterEnums();
+MooseEnum getSingleTallyScoreEnum();
+MooseEnum getSingleParticleFilterEnum();
 MooseEnum getEnergyGroupsEnum();
 MooseEnum getNekMeshEnum();
+MooseEnum getFilterTypeEnum();
+MooseEnum getStatsOutputEnum();
 
 namespace nek_mesh
 {
@@ -88,17 +93,23 @@ namespace field
 /// Enumeration of possible fields to read from nekRS
 enum NekFieldEnum
 {
-  velocity_component,
   velocity_x,
   velocity_y,
   velocity_z,
   velocity,
+  velocity_component,
+  velocity_x_squared,
+  velocity_y_squared,
+  velocity_z_squared,
   temperature,
   pressure,
   scalar01,
   scalar02,
   scalar03,
-  unity
+  unity,
+  usrwrk00,
+  usrwrk01,
+  usrwrk02
 };
 
 /// Enumeration of possible fields to write in nekRS
@@ -114,6 +125,22 @@ enum NekWriteEnum
   mesh_velocity_z
 };
 } // namespace field
+
+namespace output
+{
+/// Enumeration of possible fields to read from NekRS
+enum NekOutputEnum
+{
+  velocity_x,
+  velocity_y,
+  velocity_z,
+  temperature,
+  pressure,
+  scalar01,
+  scalar02,
+  scalar03
+};
+} // namespace output
 
 namespace operation
 {
@@ -132,8 +159,7 @@ namespace tally
 enum TallyTypeEnum
 {
   cell,
-  mesh,
-  none
+  mesh
 };
 
 /// Type of estimator to use for OpenMC tallies
@@ -229,6 +255,17 @@ enum EigenvalueEnum
 };
 } // namespace eigenvalue
 
+namespace statistics
+{
+/// The type of output for both the k-eigenvalue and kinetics parameters.
+enum OutputEnum
+{
+  Mean,
+  StDev,
+  RelError
+};
+} // namespace statistics
+
 namespace relaxation
 {
 /// Type of relaxation
@@ -240,3 +277,12 @@ enum RelaxationEnum
   none
 };
 } // namespace relaxation
+
+enum OpenMCFilterType
+{
+  cell,
+  material,
+  universe,
+  mesh,
+  none
+};

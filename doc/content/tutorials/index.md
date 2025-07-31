@@ -8,7 +8,7 @@ like to leverage Cardinal's postprocessing and/or Exodus mesh projection feature
 There are no limitations on
 how NekRS and OpenMC can interact with the MOOSE framework - as long as you can
 construct a MultiApp hierarchy that addresses your physics of interest, the existing
-[Transfers](https://mooseframework.inl.gov/syntax/Transfers/index.html) in the MOOSE
+[Transfers](Transfers/index.md) in the MOOSE
 framework are all that are needed to send data to/from NekRS and OpenMC and MOOSE.
 
 [cardinal_multiapp] illustrates how NekRS and OpenMC interact with MOOSE -
@@ -25,10 +25,7 @@ Within each category, we do recommend moving sequentially.
 !media framework.png
   id=cardinal_multiapp
   caption=High-level illustration of how NekRS and OpenMC couple to MOOSE
-  style=width:90%;margin-left:auto;margin-right:auto;halign:center
-
-Note that because this project is under significant active
-development; near-term upcoming features are indicated where appropriate.
+  style=width:70%;margin-left:auto;margin-right:auto;halign:center
 
 !alert! note title=Prerequisites
 These tutorials assume some familiarity with MOOSE, NekRS, and OpenMC as individual
@@ -58,18 +55,16 @@ on how to approach multiphysics coupling.
 These tutorials make use of the following major Cardinal classes.
 We recommend quickly reading this documentation before proceeding.
 
-- [NekRSMesh](/mesh/NekRSMesh.md)
-- [NekTimeStepper](/timesteppers/NekTimeStepper.md)
-- [NekRSProblem](/problems/NekRSProblem.md)
-- [NekRSStandaloneProblem](/problems/NekRSStandaloneProblem.md)
+- [NekRSMesh](NekRSMesh.md)
+- [NekTimeStepper](NekTimeStepper.md)
+- [NekRSProblem](NekRSProblem.md)
 !alert-end!
 
-1. [Introduction to NekRS](tutorials/nek_intro.md)
-2. [Running as a standalone application](tutorials/nekrs_standalone.md)
-3. [Conjugate heat transfer coupling to MOOSE](tutorials/cht.md)
-5. [Multiscale coupling to SAM](tutorials/sam_coupling.md)
-6. [Forward uncertainty quantification](tutorials/nekrs_stochastic.md)
-7. [Postprocessing/extracting the NekRS solution](tutorials/nekrs_outputs.md)
+1. [Introduction to NekRS](nek_intro.md)
+2. [Running as a standalone application](nekrs_standalone.md)
+3. [Conjugate heat transfer coupling](cht.md)
+4. [Forward uncertainty quantification](nekrs_stochastic.md)
+5. [Postprocessing/extracting the NekRS solution](nekrs_outputs.md)
 
 ## Tutorials for OpenMC
   id=openmc
@@ -78,23 +73,25 @@ We recommend quickly reading this documentation before proceeding.
 These tutorials make use of the following major Cardinal classes. We recommend
 quickly reading this documentation before proceeding.
 
-- [OpenMCCellAverageProblem](/problems/OpenMCCellAverageProblem.md)
+- [OpenMCCellAverageProblem](OpenMCCellAverageProblem.md)
 
 Think you're ready for the tutorials? Take our [OpenMC Cardinal quiz](https://www.flexiquiz.com/SC/N/30fc79f0-f9a5-4cfc-b140-c07dda3bdf0b)!
 !alert-end!
 
-8. [Temperature coupling to MOOSE](tutorials/openmc_solid.md)
-9. [Temperature and density coupling to MOOSE](tutorials/openmc_fluid.md)
+6. [Temperature coupling to MOOSE](openmc_solid.md)
+7. [Temperature and density coupling to MOOSE](openmc_fluid.md)
+8. [Adaptive mesh refinement on mesh tallies](openmc_amr.md)
+9. [Multi-group cross section generation](openmc_mgxs.md)
 
 ## Tutorials for Coupling NekRS and OpenMC
   id=multi
 
-10. [Coupling of NekRS, OpenMC, and MOOSE](tutorials/coupled.md)
+10. [Coupling of NekRS, OpenMC, and MOOSE](coupled.md)
 
 ## Miscellaneous
 
-11. [Converting CSG to CAD for multiphysics](tutorials/csg_to_cad.md)
-12. [Restarting coupled NekRS and MOOSE simulations](tutorials/restart_nek_moose.md)
-13. [Coupling to arbitrary MOOSE applications](tutorials/other_apps.md)
-14. [Assessing convergence](tutorials/convergence.md)
-15. [What Transfer should I use?](tutorials/transfers.md)
+11. [Converting CSG to CAD for multiphysics](csg_to_cad.md)
+12. [Restarting coupled NekRS and MOOSE simulations](restart_nek_moose.md)
+13. [Coupling to arbitrary MOOSE applications](other_apps.md)
+14. [Assessing convergence](convergence.md)
+15. [What Transfer should I use?](transfers.md)

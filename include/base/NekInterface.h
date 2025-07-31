@@ -57,10 +57,32 @@ dfloat * getSgeo();
 dfloat * getVgeo();
 
 /**
+ * Check that the field specified can be accessed, e.g., if a user is requesting
+ * to access temperature, the problem must have a temperature variable
+ * @param[in] field field to check
+ */
+void checkFieldValidity(const field::NekFieldEnum & field);
+void checkFieldValidity(const field::NekWriteEnum & field);
+
+/**
  * Set the absolute tolerance for checking energy conservation in data transfers to Nek
  * @param[in] tol tolerance
  */
 void setAbsoluteTol(double tol);
+
+/**
+ * Return the reference units for a usrwrk slot
+ * @param[in] slot usrwrk slot
+ * @return value by which to multiply the usrwrk slot to go from non-dimensional form into
+ * dimensional form
+ */
+Real scratchUnits(const int slot);
+
+/**
+ * Inform backend if dimensionalization should be performed
+ * @param[in] n if dimensionalize should be performed
+ */
+void nondimensional(const bool n);
 
 /**
  * Set the relative tolerance for checking energy conservation in data transfers to Nek
@@ -194,6 +216,12 @@ int scalarFieldOffset();
  * @return velocity field offset
  */
 int velocityFieldOffset();
+
+/**
+ * Offset increment to use for generic slice indexing
+ * @return field offset
+ */
+int fieldOffset();
 
 /**
  * Get the "entire" NekRS mesh. For cases with a temperature scalar, this returns
@@ -391,36 +419,6 @@ double usrwrkVolumeIntegral(const unsigned int & slot, const nek_mesh::NekMeshEn
 void scaleUsrwrk(const unsigned int & slot, const dfloat & value);
 
 /**
- * Normalize the flux sent to nekRS to conserve the total flux
- * @param[in] nek_boundary_coupling data structure holding boundary coupling info
- * @param[in] boundary boundaries for which to normalize the flux
- * @param[in] moose_integral total integrated flux from MOOSE to conserve
- * @param[in] nek_integral total integrated flux in nekRS to adjust
- * @param[out] normalized_nek_integral final normalized nek flux integral
- * @return whether normalization was successful, i.e. normalized_nek_integral equals moose_integral
- */
-bool normalizeFluxBySideset(const NekBoundaryCoupling & nek_boundary_coupling,
-                   const std::vector<int> & boundary,
-                   const std::vector<double> & moose_integral,
-                   std::vector<double> & nek_integral,
-                   double & normalized_nek_integral);
-
-/**
- * Normalize the flux sent to nekRS to conserve the total flux
- * @param[in] nek_boundary_coupling data structure holding boundary coupling info
- * @param[in] boundary boundaries for which to normalize the flux
- * @param[in] moose_integral total integrated flux from MOOSE to conserve
- * @param[in] nek_integral total integrated flux in nekRS to adjust
- * @param[out] normalized_nek_integral final normalized nek flux integral
- * @return whether normalization was successful, i.e. normalized_nek_integral equals moose_integral
- */
-bool normalizeFlux(const NekBoundaryCoupling & nek_boundary_coupling,
-                   const std::vector<int> & boundary,
-                   const double moose_integral,
-                   double nek_integral,
-                   double & normalized_nek_integral);
-
-/**
  * Compute the area of a set of boundary IDs
  * @param[in] boundary_id nekRS boundary IDs for which to perform the integral
  * @param[in] pp_mesh which NekRS mesh to operate on
@@ -550,11 +548,15 @@ void limitTemperature(const double * min_T, const double * max_T);
 /**
  * Compute the gradient of a volume field
  * @param[in] offset in the gradient field for each component (grad_x, grad_y, or grad_z)
+ * @param[in] e element ID to compute gradient
  * @param[in] f field to compute the gradient of
  * @param[in] pp_mesh which NekRS mesh to operate on
  * @param[out] grad_f gradient of field
  */
-void gradient(const int offset, const double * f, double * grad_f,
+void gradient(const int offset,
+              const int e,
+              const double * f,
+              double * grad_f,
               const nek_mesh::NekMeshEnum pp_mesh);
 
 /**
@@ -676,60 +678,48 @@ void storeBoundaryCoupling(const std::vector<int> & boundary_id, int & N);
 struct usrwrkIndices
 {
   /// boundary heat flux (for conjugate heat transfer)
-  int flux;
+  int flux = -1;
 
   /// volumetric heat source (for volumetric heating)
-  int heat_source;
+  int heat_source = -1;
 
   /// x-velocity of moving boundary (for mesh blending solver)
-  int mesh_velocity_x;
+  int mesh_velocity_x = -1;
 
   /// y-velocity of moving boundary (for mesh blending solver)
-  int mesh_velocity_y;
+  int mesh_velocity_y = -1;
 
   /// z-velocity of moving boundary (for mesh blending solver)
-  int mesh_velocity_z;
+  int mesh_velocity_z = -1;
 
-  /// boundary velocity (for separate domain coupling)
-  int boundary_velocity;
-
-  /// boundary temperature (for separate domain coupling)
-  int boundary_temperature;
-
-  /// boundary scalar01 (for separate domain coupling)
-  int boundary_scalar01;
-
-  /// boundary scalar02 (for separate domain coupling)
-  int boundary_scalar02;
-
-  /// boundary scalar03 (for separate domain coupling)
-  int boundary_scalar03;
+  /// temperature (for reverse-direction conjugate heat transfer coupling)
+  int temperature = -1;
 };
 
-/// Characteristic scales assumed in nekRS if using a non-dimensional solution
+/**
+ * Characteristic scales assumed in nekRS if using a non-dimensional solution; initial values
+ * are applied, which will be overridden by the DimensionalizeAction in Cardinal.
+ */
 struct characteristicScales
 {
-  double U_ref;
-
-  double T_ref;
-
-  double dT_ref;
-
-  double L_ref;
-
-  double A_ref;
-
-  double V_ref;
-
-  double rho_ref;
-
-  double Cp_ref;
-
-  double flux_ref;
-
-  double source_ref;
-
-  bool nondimensional_T;
+  double U_ref = 1;
+  double T_ref = 0;
+  double dT_ref = 1;
+  double P_ref = 1;
+  double L_ref = 1;
+  double A_ref = 1;
+  double V_ref = 1;
+  double rho_ref = 1;
+  double Cp_ref = 1;
+  double flux_ref = 1;
+  double source_ref = 1;
+  double t_ref = 1;
+  double s01_ref = 0;
+  double ds01_ref = 1;
+  double s02_ref = 0;
+  double ds02_ref = 1;
+  double s03_ref = 0;
+  double ds03_ref = 1;
 };
 
 /**
@@ -737,174 +727,238 @@ struct characteristicScales
  * @param[in] field field to return a pointer to
  * @return function pointer to method that returns said field as a function of GLL index
  */
-double (*solutionPointer(const field::NekFieldEnum & field))(int);
+double (*solutionPointer(const field::NekFieldEnum & field))(int, int);
+double (*solutionPointer(const field::NekWriteEnum & field))(int, int);
 
 /**
  * Write various solution functions based on enumeration
  * @param[in] field field to write
  */
-void (*solutionPointer(const field::NekWriteEnum & field))(int, dfloat);
+void (*solutionWritePointer(const field::NekWriteEnum & field))(int, dfloat);
+void (*solutionWritePointer(const field::NekFieldEnum & field))(int, dfloat);
 
 /**
- * \brief Get the scalar01 solution at given GLL index
- *
+ * Get the scalar01 solution at given GLL index
  * @param[in] id GLL index
  * @return scalar01 value at index
  */
-double scalar01(const int id);
+double get_scalar01(const int id, const int surf_offset);
 
 /**
- * \brief Get the scalar02 solution at given GLL index
- *
+ * Get the scalar02 solution at given GLL index
  * @param[in] id GLL index
  * @return scalar02 value at index
  */
-double scalar02(const int id);
+double get_scalar02(const int id, const int surf_offset);
 
 /**
- * \brief Get the scalar03 solution at given GLL index
- *
+ * Get the scalar03 solution at given GLL index
  * @param[in] id GLL index
  * @return scalar03 value at index
  */
-double scalar03(const int id);
+double get_scalar03(const int id, const int surf_offset);
 
 /**
- * \brief Get the temperature solution at given GLL index
- *
- * Because nekRS stores all the passive scalars together in one flat array, this routine
- * simply indices into the entire passive scalar solution. In order to get temperature, you should
- * only index up to nrs->cds->fieldOffset.
+ * Get the usrwrk zeroth slice at given GLL index
+ * @param[in] id GLL index
+ * @return zeroth slice of usrwrk value at index
+ */
+double get_usrwrk00(const int id, const int surf_offset);
+
+/**
+ * Get the usrwrk first slice at given GLL index
+ * @param[in] id GLL index
+ * @return first slice of usrwrk value at index
+ */
+double get_usrwrk01(const int id, const int surf_offset);
+
+/**
+ * Get the usrwrk second slice at given GLL index
+ * @param[in] id GLL index
+ * @return second slice of usrwrk value at index
+ */
+double get_usrwrk02(const int id, const int surf_offset);
+
+/**
+ * Get the temperature solution at given GLL index
  * @param[in] id GLL index
  * @return temperature value at index
  */
-double temperature(const int id);
+double get_temperature(const int id, const int surf_offset);
 
 /**
  * Get the pressure solution at given GLL index
  * @param[in] id GLL index
  * @return pressure value at index
  */
-double pressure(const int id);
+double get_pressure(const int id, const int surf_offset);
 
 /**
  * Return unity, for cases where the integrand or operator we are generalizing acts on 1
  * @param[in] id GLL index
  * @return unity
  */
-double unity(const int id);
+double get_unity(const int id, const int surf_offset);
 
 /**
  * Get the x-velocity at given GLL index
  * @param[in] id GLL index
  * @return x-velocity at index
  */
-double velocity_x(const int id);
+double get_velocity_x(const int id, const int surf_offset);
 
 /**
  * Get the y-velocity at given GLL index
  * @param[in] id GLL index
  * @return y-velocity at index
  */
-double velocity_y(const int id);
+double get_velocity_y(const int id, const int surf_offset);
 
 /**
  * Get the z-velocity at given GLL index
  * @param[in] id GLL index
  * @return z-velocity at index
  */
-double velocity_z(const int id);
+double get_velocity_z(const int id, const int surf_offset);
 
 /**
  * Get the magnitude of the velocity solution at given GLL index
  * @param[in] id GLL index
  * @return velocity magnitude at index
  */
-double velocity(const int id);
+double get_velocity(const int id, const int surf_offset);
+
+/**
+ * Get the x-velocity squared at given GLL index
+ * @param[in] id GLL index
+ * @return square of x-velocity at index
+ */
+double get_velocity_x_squared(const int id, const int surf_offset);
+
+/**
+ * Get the y-velocity squared at given GLL index
+ * @param[in] id GLL index
+ * @return square of y-velocity at index
+ */
+double get_velocity_y_squared(const int id, const int surf_offset);
+
+/**
+ * Get the z-velocity squared at given GLL index
+ * @param[in] id GLL index
+ * @return square of z-velocity at index
+ */
+double get_velocity_z_squared(const int id, const int surf_offset);
+
+/**
+ * Write a value into the user scratch space that holds the temperature
+ * @param[in] id index
+ * @param[in] value value to write
+ */
+void set_temperature(const int id, const dfloat value);
 
 /**
  * Write a value into the user scratch space that holds the flux
  * @param[in] id index
  * @param[in] value value to write
  */
-void flux(const int id, const dfloat value);
+void set_flux(const int id, const dfloat value);
 
 /**
  * Write a value into the user scratch space that holds the volumetric heat source
  * @param[in] id index
  * @param[in] value value to write
  */
-void heat_source(const int id, const dfloat value);
+void set_heat_source(const int id, const dfloat value);
 
 /**
  * Write a value into the x-displacement
  * @param[in] id index
  * @param[in] value value to write
  */
-void x_displacement(const int id, const dfloat value);
+void set_x_displacement(const int id, const dfloat value);
 
 /**
  * Write a value into the y-displacement
  * @param[in] id index
  * @param[in] value value to write
  */
-void y_displacement(const int id, const dfloat value);
+void set_y_displacement(const int id, const dfloat value);
 
 /**
  * Write a value into the z-displacement
  * @param[in] id index
  * @param[in] value value to write
  */
-void z_displacement(const int id, const dfloat value);
+void set_z_displacement(const int id, const dfloat value);
 
 /**
  * Initialize the characteristic scales for a nondimesional solution
- * @param[in] U_ref reference velocity
- * @param[in] T_ref reference temperature
- * @param[in] dT_ref reference temperature range
- * @param[in] L_ref reference length scale
- * @param[in] rho_ref reference density
- * @param[in] Cp_ref reference heat capacity
+ * @param[in] U reference velocity
+ * @param[in] T reference temperature
+ * @param[in] dT reference temperature range
+ * @param[in] L reference length scale
+ * @param[in] rho reference density
+ * @param[in] Cp reference heat capacity
+ * @param[in] s01 reference scalar01
+ * @param[in] ds01 reference s01 range
+ * @param[in] s02 reference scalar02
+ * @param[in] ds02 reference s02 range
+ * @param[in] s03 reference scalar03
+ * @param[in] ds03 reference s03 range
  */
-void initializeDimensionalScales(const double U_ref,
-                                 const double T_ref,
-                                 const double dT_ref,
-                                 const double L_ref,
-                                 const double rho_ref,
-                                 const double Cp_ref);
+void initializeDimensionalScales(const double U,
+                                 const double T,
+                                 const double dT,
+                                 const double L,
+                                 const double rho,
+                                 const double Cp,
+                                 const double s01,
+                                 const double ds01,
+                                 const double s02,
+                                 const double ds02,
+                                 const double s03,
+                                 const double ds03);
 
 /**
- * \brief Dimensionalize a field by multiplying the nondimensional form by the reference
+ * \brief Return the reference divisor scale that defines the non-dimensional field
  *
- * This routine dimensionalizes a nondimensional term by multiplying the non-dimensional form
- * by a scalar, i.e. \f$f^\dagger=\frac{f}{f_ref}\f$, where \f$f^\dagger\f$ is the nondimensional
- * form and \f$f_{ref}\f$ is a reference scale with form particular to the interpretation of the
- * field. Note that for temperature in particular, there are still additional steps to
- * dimensionalize, because we do not define a nondimensional temperature simply as
- * \f$T^\dagger=\frac{T}{\Delta T_{ref}}\f$. But, this function just treats the characteristic scale
- * that would appear in the denominator.
- * @param[in] field physical interpretation of value to dimensionalize
- * @param[out] value value to dimensionalize
+ * All fields in NekRS are assumed non-dimensionalized according to the general form
+ * f (non-dimensional) = (f - f_ref) / df
+ *
+ * so that to define a nondimensionalization requires two scales: the divisor scale
+ * (df) and the additive scale (f_ref).
+ *
+ * @param[in] field physical interpretation of value
+ * @param[out] value nondimensional divisor scale (df)
  */
-void dimensionalize(const field::NekFieldEnum & field, double & value);
+Real nondimensionalDivisor(const field::NekFieldEnum & field);
+Real nondimensionalDivisor(const field::NekWriteEnum & field);
 
 /**
- * Get the reference heat flux scale, \f$\rho C_pU\Delta T\f$
- * @return reference heat flux scale
+ * All fields in NekRS are assumed non-dimensionalized according to the general form
+ * f (non-dimensional) = (f - f_ref) / df
+ *
+ * so that to define a nondimensionalization requires two scales: the divisor scale
+ * (df) and the additive scale (f_ref).
+ *
+ * @param[in] field physical interpretation of value
+ * @param[out] value nondimensional additive scale (f_ref)
+ *
  */
-double referenceFlux();
-
-/**
- * Get the reference heat source scale, \f$\rho C_pU\Delta T/L\f$
- * @return reference heat source scale
- */
-double referenceSource();
+Real nondimensionalAdditive(const field::NekFieldEnum & field);
+Real nondimensionalAdditive(const field::NekWriteEnum & field);
 
 /**
  * Get the reference length scale
  * @return reference length scale
  */
 double referenceLength();
+
+/**
+ * Get the reference time scale
+ * @return reference time scale
+ */
+double referenceTime();
 
 /**
  * Get the reference area scale

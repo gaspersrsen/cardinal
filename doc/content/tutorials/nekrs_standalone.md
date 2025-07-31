@@ -42,11 +42,16 @@ To contrast with the previous example, you can achieve the same "standalone"
 calculations via Cardinal, which you might be interested in to leverage Cardinal's
 postprocessing and data I/O features. Some useful features include:
 
-- Postprocessors to evaluate max/mins, area/volume integrals and averages,
-  and mass flux-weighted side integrals of the NekRS solution
-- Extracting the NekRS solution into any output format supported by MOOSE (such as
-  Exodus and VTK - see the full list of formats
-  [here](https://mooseframework.inl.gov/syntax/Outputs/index.html)).
+- Query the solution, evaluate heat balances and pressure drops,
+  or evaluate solution convergence
+- Providing one-way coupling to other MOOSE applications, such as for
+  transporting scalars based on NekRS's velocity solution or for projecting
+  NekRS turbulent viscosity closure terms onto another MOOSE application's mesh
+- Project the NekRS solution onto other discretization schemes,
+  such as a subchannel discretization, or onto other MOOSE applications, such as
+  for providing closures
+- Automatically convert nondimensional NekRS solutions into dimensional form
+- Because the MOOSE framework supports many different [output formats](Outputs/index.md), obtain a representation of the NekRS solution in Exodus, VTK, CSV, and other formats.
 
 Instead of running a NekRS input
 with the `nekrs` executable, you can instead
@@ -60,9 +65,9 @@ Cardinal simply replaces calls to MOOSE solve methods with NekRS solve methods a
 through an [!ac](API). There are no data transfers to/from NekRS. A
 thinly-wrapped simulation uses:
 
-1. [NekRSMesh](/mesh/NekRSMesh.md): create a "mirror" of the NekRS mesh, which can *optionally* be used to interpolate
+1. [NekRSMesh](NekRSMesh.md): create a "mirror" of the NekRS mesh, which can *optionally* be used to interpolate
    a high-order NekRS solution into a lower-order mesh (in any MOOSE-supported format).
-2. [NekRSStandaloneProblem](/problems/NekRSStandaloneProblem.md): allow MOOSE to run NekRS
+2. [NekRSProblem](NekRSProblem.md): allow MOOSE to run NekRS
 
 For this tutorial, we will use the `turbPipe` example that ships with the NekRS repository
 as an example case. This case models
@@ -100,9 +105,9 @@ The Cardinal input file is shown below; this is not the simplest file that we
 The essential blocks in the input file are:
 
 - `Mesh`: creates a lower-order mirror of the NekRS mesh
-- `Problem`: replaces MOOSE finite element solves with NekRS solves
+- `Problem`: replaces MOOSE finite element solves with NekRS solves. [NekFieldVariable](NekFieldVariable.md) objects are added in order to read from the NekRS internal solution fields and write onto the [NekRSMesh](NekRSMesh.md) for viewing.
 - `Executioner`: controls the time stepping according to the settings in the NekRS input files
-- `Outputs`: outputs any results that have been projected onto the [NekRSMesh](/mesh/NekRSMesh.md) to the specified format.
+- `Outputs`: outputs any results that have been projected onto the [NekRSMesh](NekRSMesh.md) to the specified format.
 
 This input file is run with:
 
@@ -126,9 +131,9 @@ the rest of the contents in the `nek.i` input file.
 This file adds a few additional postprocessing operations to compute:
 
 - pressure drop, computed by subtracting the inlet average pressure from the outlet
-  average pressure with two [NekSideAverage](/postprocessors/NekSideAverage.md)
-  postprocessors and the [DifferencePostprocessor](https://mooseframework.inl.gov/source/postprocessors/DifferencePostprocessor.html)
-- mass flowrate, computed with a [NekMassFluxWeightedSideIntegral](/postprocessors/NekMassFluxWeightedSideIntegral.md)
+  average pressure with two [NekSideAverage](NekSideAverage.md)
+  postprocessors and the [DifferencePostprocessor](DifferencePostprocessor.md)
+- mass flowrate, computed with a [NekMassFluxWeightedSideIntegral](NekMassFluxWeightedSideIntegral.md)
   postprocessor
 
 !listing /tutorials/standalone/nek.i
@@ -159,12 +164,11 @@ time,dP,mdot
 0.018,1.540674311383,-0.78539846245391
 ```
 
-By setting `output = 'pressure velocity'` for [NekRSStandaloneProblem](/problems/NekRSStandaloneProblem.md),
-we interpolate the NekRS solution (which for this example has $(7+1)^3$ degrees of
+By using [NekFieldVariable](NekFieldVariable.md) objects in the `[FieldTransfers]` block,
+we write the NekRS solution for pressure and velocity (which for this example has $(7+1)^3$ degrees of
 freedom per element, since `polynomialOrder = 7` in `turbPipe.par`)
-onto a second-order version of the same mesh by creating
-[MooseVariables](https://mooseframework.inl.gov/source/variables/MooseVariable.html)
-named `P` and `velocity`. You can then apply *any* MOOSE object to those
+onto second-order Lagrange auxiliary variables
+named `P` and `velocity_x`, `velocity_y`, and `velocity_z`. You can then apply *any* MOOSE object to those
 variables, such as postprocessors, userobjects, auxiliary kernels, and so on.
 You can also transfer these variables to another MOOSE application
 if you want to couple NekRS to MOOSE *without feedback* - such as for using
@@ -175,7 +179,7 @@ the mesh mirror, are shown in [nek_vels].
 
 !media nek_velocity_turbpipe.png
   id=nek_vels
-  caption=NekRS computed axial velocity (top) and the velocity interpolated onto the [NekRSMesh](/mesh/NekRSMesh.md) mirror (bottom)
+  caption=NekRS computed axial velocity (top) and the velocity interpolated onto the [NekRSMesh](NekRSMesh.md) mirror (bottom)
   style=width:60%;margin-left:auto;margin-right:auto;halign:center
 
 We can also apply several userobjects *directly* to the NekRS solution for a
@@ -192,8 +196,8 @@ of the NekRS solution - they are *directly* doing integrals/averages/etc. on
 the [!ac](GLL) points.
 
 If we want to view the output of this averaging on the
-[NekRSMesh](/mesh/NekRSMesh.md), we could visualize it with a
-[SpatialUserObjectAux](https://mooseframework.inl.gov/source/auxkernels/SpatialUserObjectAux.html).
+[NekRSMesh](NekRSMesh.md), we could visualize it with a
+[SpatialUserObjectAux](SpatialUserObjectAux.md).
 
 !listing /tutorials/standalone/nek.i
   start=AuxVariables
@@ -214,7 +218,7 @@ be seen).
   style=width:65%;margin-left:auto;margin-right:auto;halign:center
 
 Instead, we can
-leverage MOOSE's [MultiApp](https://mooseframework.inl.gov/syntax/MultiApps/index.html)
+leverage MOOSE's [MultiApp](MultiApps/index.md)
 system to transfer the user object to a sub-application with a different mesh
 than what is used in NekRS. Then we can visualize the averaging operation
 perfectly without concern for the fact that the NekRS mesh doesn't have elements
@@ -238,3 +242,29 @@ which exactly represents the 12 radial averaging bins.
   id=avg2
   caption=Representation of the `volume_averages` binned exactly as computed by user object
   style=width:65%;margin-left:auto;margin-right:auto;halign:center
+
+A few examples of other postprocessors that may be of use to NekRS
+simulations include:
+
+- [ElementL2Error](ElementL2Error.md),
+  which computes the L$^2$ norm of a variable relative to a provided
+  function, useful for solution verification
+- [FindValueOnLine](FindValueOnLine.md),
+  which finds the point at which a specified value of a variable occurs,
+  which might be used for evaluating a boundary layer thickness
+- [LinearCombinationPostprocessor](LinearCombinationPostprocessor.md),
+  which can be used to combine postprocessors together in a
+  general expression $a_0p_0+a_1p_1+\cdots+b$, where $a_i$ are coefficients,
+  $p_i$ are postprocessors, and $b$ is a constant additive factor. This can be used
+  to compute the temperature *rise* in a domain by subtracting a postprocessor
+  that computes the inlet temperature from a postprocessor that computes the
+  outlet temperature.
+- [PercentChangePostprocessor](PercentChangePostprocessor.md) which computes the percent
+  change between two successive time steps for assessing convergence.
+- [TimeExtremeValue](TimeExtremeValue.md),
+  which provides the maximum/minimum value of a variable over the course of
+  an entire simulation, such as for evaluating peak stress in an
+  oscillating system
+
+Please consult the [MOOSE documentation](https://mooseframework.inl.gov/source/index.html)
+for a full list of available postprocessors.

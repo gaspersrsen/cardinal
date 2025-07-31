@@ -72,9 +72,8 @@ NekRSMesh::NekRSMesh(const InputParameters & parameters)
 
   // see if NekRS's mesh even exists
   if (!nekrs::isInitialized())
-    mooseError("This mesh can only be used with wrapped Nek cases!\n"
-               "You need to change the problem type to a Nek-wrapped problem.\n\n"
-               "options: 'NekRSProblem', 'NekRSSeparateDomainProblem', 'NekRSStandaloneProblem'");
+    mooseError("This mesh can only be used with wrapped Nek cases! "
+               "You need to change the problem type to NekRSProblem.");
 
   _nek_internal_mesh = nekrs::entireMesh();
 
@@ -163,6 +162,7 @@ NekRSMesh::printMeshInfo() const
     _n_volume_elems * _n_build_per_volume_elem);
 
   vt.print(_console);
+  _console << std::endl;
 }
 
 std::unique_ptr<MooseMesh>

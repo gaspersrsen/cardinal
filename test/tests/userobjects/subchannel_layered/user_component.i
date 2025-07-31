@@ -4,9 +4,26 @@
 []
 
 [Problem]
-  type = NekRSStandaloneProblem
+  type = NekRSProblem
   casename = 'sfr_7pin'
-  output = 'velocity'
+
+  [FieldTransfers]
+    [vel_x]
+      type = NekFieldVariable
+      direction = from_nek
+      field = velocity_x
+    []
+    [vel_y]
+      type = NekFieldVariable
+      direction = from_nek
+      field = velocity_y
+    []
+    [vel_z]
+      type = NekFieldVariable
+      direction = from_nek
+      field = velocity_z
+    []
+  []
 []
 
 [AuxVariables]
@@ -99,28 +116,24 @@
     source_variable = uo_x
     to_multi_app = subchannel
     variable = uo_x
-    search_value_conflicts = false
   []
   [uoy_to_sub]
     type = MultiAppGeneralFieldNearestLocationTransfer
     source_variable = uo_y
     to_multi_app = subchannel
     variable = uo_y
-    search_value_conflicts = false
   []
   [uoz_to_sub]
     type = MultiAppGeneralFieldNearestLocationTransfer
     source_variable = uo_z
     to_multi_app = subchannel
     variable = uo_z
-    search_value_conflicts = false
   []
   [analytic_to_sub]
     type = MultiAppGeneralFieldNearestLocationTransfer
     source_variable = velocity_component
     to_multi_app = subchannel
     variable = velocity_component
-    search_value_conflicts = false
   []
 []
 

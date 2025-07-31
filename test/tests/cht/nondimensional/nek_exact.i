@@ -1,16 +1,32 @@
 [Problem]
   type = NekRSProblem
   casename = 'sfr_pin'
+  n_usrwrk_slots = 1
 
   # This input is run in nondimensional form to verify that all the postprocessors
   # and data transfers in/out of nekRS are properly dimensionalized.
-  nondimensional = true
-  U_ref = 0.0950466
-  T_ref = 628.15
-  dT_ref = 50.0
-  L_ref = 0.908e-2
-  rho_0 = 834.5
-  Cp_0 = 1228.0
+  [Dimensionalize]
+    U = 0.0950466
+    T = 628.15
+    dT = 50.0
+    L = 0.908e-2
+    rho = 834.5
+    Cp = 1228.0
+  []
+
+  [FieldTransfers]
+    [avg_flux]
+      type = NekBoundaryFlux
+      direction = to_nek
+      usrwrk_slot = 0
+      postprocessor_to_conserve = flux_integral
+    []
+    [temp]
+      type = NekFieldVariable
+      field = temperature
+      direction = from_nek
+    []
+  []
 []
 
 [Mesh]
