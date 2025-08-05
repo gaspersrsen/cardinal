@@ -1,6 +1,7 @@
 [submodule "contrib/openmc"]
 	path = contrib/openmc
 	url = https://github.com/gaspersrsen/openmc.git
+	branch = 15.3_merged
 [submodule "contrib/nekRS"]
 	path = contrib/nekRS
 	url = https://github.com/gaspersrsen/nekRS.git
